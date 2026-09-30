@@ -70,5 +70,6 @@ git push origin main
 
 | Change | Branch (public fork) | Upstream |
 | --- | --- | --- |
-| Restore switches left under the train after Send past waypoint | `fix/send-past-restore-switches` | [Issue #75](https://github.com/PrinceOfPluto/WaypointQueue/issues/75); no PR yet, waiting for the maintainer |
-| Reset switches the train was on when it reached any waypoint, once it's clear of them | `fix/restore-switches-after-waypoint` | Not proposed upstream yet |
+| Reset switches the train was on when it reached any waypoint (including Send past waypoint), once it's clear of them | `fix/restore-switches-after-waypoint` | Proposed on [issue #75](https://github.com/PrinceOfPluto/WaypointQueue/issues/75) as the fix |
+
+`fix/send-past-restore-switches` on the public fork is an earlier, Send-past-only version of this fix. It's no longer in this version, but the branch is kept in case upstream prefers the narrower change.
