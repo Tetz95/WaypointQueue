@@ -17,6 +17,7 @@ namespace WaypointQueue.Tests
         private Area SylvaArea = new();
         private Area WhittierArea = new();
         private Area BrysonArea = new();
+        private Area DillsboroArea = new();
 
         public UncouplingServiceTest()
         {
@@ -39,10 +40,16 @@ namespace WaypointQueue.Tests
             {
                 identifier = "Bryson"
             };
+            // No car in the mocked consists is bound for Dillsboro
+            DillsboroArea = new Area()
+            {
+                identifier = "Dillsboro"
+            };
 
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Sylva", out SylvaArea)).Returns(true);
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Whittier", out WhittierArea)).Returns(true);
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Bryson", out BrysonArea)).Returns(true);
+            _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Dillsboro", out DillsboroArea)).Returns(true);
         }
 
         [Fact]
@@ -194,6 +201,9 @@ namespace WaypointQueue.Tests
         [InlineData("Bryson", true, false, 0, null, null)]
         [InlineData("Bryson", false, true, 6, "0", "5")]
         [InlineData("Bryson", false, false, 1, "10", "10")]
+        [InlineData("Dillsboro", true, true, 0, null, null)]
+        [InlineData("Dillsboro", false, true, 0, null, null)]
+        [InlineData("Dillsboro", false, false, 0, null, null)]
         public void FindCutByDestinationArea(string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedConsist(out Car locomotive, out var _);
@@ -238,6 +248,8 @@ namespace WaypointQueue.Tests
         [InlineData(5, "Sylva", true, false, 2, "0", "1")]
         [InlineData(5, "Sylva", false, true, 0, null, null)]
         [InlineData(5, "Sylva", false, false, 0, null, null)]
+        [InlineData(5, "Dillsboro", false, true, 6, "0", "5")]
+        [InlineData(5, "Dillsboro", false, false, 6, "0", "5")]
         public void FindPickupByDestinationArea(int indexOfCoupled, string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedPostCoupleConsist(out Car locomotive, out List<Car> consist);
@@ -285,6 +297,8 @@ namespace WaypointQueue.Tests
         [InlineData(5, "Sylva", true, false, 10, "0", "9")]
         [InlineData(5, "Sylva", false, true, 7, "0", "6")]
         [InlineData(5, "Sylva", false, false, 11, "0", "10")]
+        [InlineData(5, "Dillsboro", false, true, 0, null, null)]
+        [InlineData(5, "Dillsboro", false, false, 0, null, null)]
         public void FindDropoffByDestinationArea(int indexOfCoupled, string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedPostCoupleConsist(out Car locomotive, out List<Car> consist);
@@ -445,8 +459,21 @@ namespace WaypointQueue.Tests
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.B)).Returns(reversed);
 
             _carServiceMock.Setup(s => s.GetEndsRelativeToLocation(It.IsAny<Car>(), It.IsAny<Location>())).Returns((Car.LogicalEnd.A, Car.LogicalEnd.B));
+            SetupTrainEndA();
 
             locomotive = locoMock;
+        }
+
+        // The train end nearest the waypoint is the end reached from the locomotive's logical end A
+        private void SetupTrainEndA()
+        {
+            float closestDistance = 0f;
+            Car? closestCar = null;
+            Car? furthestCar = null;
+            Car.LogicalEnd closestEnd = Car.LogicalEnd.A;
+            Car.LogicalEnd furthestEnd = Car.LogicalEnd.B;
+            _carServiceMock.Setup(s => s.GetTrainEndLocations(It.IsAny<Car>(), It.IsAny<Location>(), out closestDistance, out closestCar, out furthestCar, out closestEnd, out furthestEnd))
+                .Returns((new Location(), new Location()));
         }
 
         private void SetupMockedConsist(out Car locomotive, out List<Car> consist)
@@ -461,6 +488,7 @@ namespace WaypointQueue.Tests
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.B)).Returns(reversed);
 
             _carServiceMock.Setup(s => s.GetEndsRelativeToLocation(It.IsAny<Car>(), It.IsAny<Location>())).Returns((Car.LogicalEnd.A, Car.LogicalEnd.B));
+            SetupTrainEndA();
 
             locomotive = locoMock;
         }

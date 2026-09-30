@@ -19,7 +19,7 @@ Remotes in this folder:
 | `upstream` | PrinceOfPluto/WaypointQueue | Merging upstream releases |
 | `public` | Tetz95/WaypointQueue (public fork) | Merging `fix/...` branches made for upstream |
 
-Changes that are only for this version can be committed straight to `tetz`.
+Changes that are only for this version can be committed straight to `tetz`. Fixes are now made that way too, without a branch on the public fork, unless they're meant for upstream.
 
 ## Building
 
@@ -29,6 +29,8 @@ The upstream project file (`WaypointQueue/WaypointQueue.csproj`) needs Visual St
 2. Run `dotnet build Tetz/WaypointQueue.Tetz.csproj` from the repo root.
 
 The build installs `WaypointQueue.dll`, its `.pdb` and [Info.json](Info.json) into `Railroader\Mods\WaypointQueue\`. The existing `Settings.xml` there is kept.
+
+To run upstream's unit tests, and any added here, use `dotnet test Tetz/Tests/WaypointQueue.Tetz.Tests.csproj`. Like the build, it needs `Paths.user`.
 
 ## Versioning and updates
 
@@ -77,5 +79,8 @@ git push origin main
 | Queue each loco for periodic reroute only once | `fix/reroute-queue-duplicates` | Not reported yet |
 | Import pre-1.6 JSON save data only once per save | `fix/legacy-migration-once` | Not reported yet |
 | Store wait times culture-invariant, so saves read back correctly on machines with a comma decimal separator | `fix/invariant-number-storage` | Not reported yet |
+| Uncoupling by destination with no matching car no longer tries to cut the whole train (or silently drop every car after coupling); it leaves the train as it is and says so in the console | `tetz` only | Same bug as [#74](https://github.com/PrinceOfPluto/WaypointQueue/issues/74) and [#70](https://github.com/PrinceOfPluto/WaypointQueue/issues/70) |
+| Count uncoupled cars from the train end nearest the waypoint, not from the locomotive end nearest it, so a train on curved track isn't read backwards | `tetz` only | [#70](https://github.com/PrinceOfPluto/WaypointQueue/issues/70) |
+| Unit tests run again: test locomotives are mocked as `BaseLocomotive` | `tetz` only | |
 
 `fix/send-past-restore-switches` on the public fork is an earlier, Send-past-only version of this fix. It's no longer in this version, but the branch is kept in case upstream prefers the narrower change.
