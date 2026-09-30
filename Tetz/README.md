@@ -50,3 +50,4 @@ Then update the version in `Tetz/Info.json` and rebuild.
 | Change | Branch | Upstream |
 | --- | --- | --- |
 | Restore switches left under the train after Send past waypoint | `fix/send-past-restore-switches` | [Issue #75](https://github.com/PrinceOfPluto/WaypointQueue/issues/75); no PR yet, waiting for the maintainer |
+| Reset switches the train was on when it reached any waypoint, once it's clear of them | `fix/restore-switches-after-waypoint` | Not proposed upstream yet |
