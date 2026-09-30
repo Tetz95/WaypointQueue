@@ -137,8 +137,10 @@ namespace WaypointQueue.State
             {
                 if (Multiplayer.IsHost)
                 {
-                    // If there is no loaded data at this point, check if old save data needs to be migrated
-                    if (_queueStateStorage.Count == 0 && _routeStorage.Count == 0 && _waypointModStorage.RouteAssignments.Count == 0)
+                    // If this save has never been migrated and has no data yet, check if old save data needs
+                    // to be migrated. Version is set on the first load below, so this runs once per save
+                    // instead of re-importing old JSON files whenever every queue has finished.
+                    if (String.IsNullOrEmpty(_waypointModStorage.Version) && _queueStateStorage.Count == 0 && _routeStorage.Count == 0 && _waypointModStorage.RouteAssignments.Count == 0)
                     {
                         MigrateFromJsonSaveToStorage();
                     }
