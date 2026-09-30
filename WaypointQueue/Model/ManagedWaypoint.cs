@@ -633,6 +633,7 @@ namespace WaypointQueue
                 copy = ManagedWaypoint.FromPropertyValue(this.ToPropertyValue());
                 copy.Id = Guid.NewGuid().ToString();
                 copy.LocomotiveId = loco?.id ?? null;
+                copy.ResetProgress();
                 return true;
             }
             else
@@ -640,6 +641,24 @@ namespace WaypointQueue
                 copy = null;
                 return false;
             }
+        }
+
+        // Clears the state of a waypoint that is being worked on, so a copy starts fresh instead of
+        // resuming a wait, refuel or coupling that belongs to the original.
+        private void ResetProgress()
+        {
+            CurrentlyWaiting = false;
+            WaitingWasSkipped = false;
+            WaitUntilGameTotalSeconds = 0;
+            CurrentlyRefueling = false;
+            RefuelLocoIdsQueue = [];
+            RepositioningToRetryRefuel = false;
+            HasResolvedBrakeSystemOnCouple = false;
+            CurrentlyCouplingNearby = false;
+            CurrentlyCouplingSpecificCar = false;
+            CurrentlyWaitingBeforeCutting = false;
+            StatusLabel = "Inactive";
+            Errors = [];
         }
 
         public override string ToString()
