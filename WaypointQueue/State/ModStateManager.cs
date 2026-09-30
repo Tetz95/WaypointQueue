@@ -347,13 +347,18 @@ namespace WaypointQueue.State
             Loader.LogDebug($"Queue removed from storage for loco id: {key}");
             if (Multiplayer.IsHost && _prevLocoWaypointStates.TryGetValue(key, out LocoWaypointState oldState))
             {
-                using (StateManager.TransactionScope())
+                // The loco may already be gone, for example when an orphaned queue is removed.
+                BaseLocomotive loco = oldState.Locomotive;
+                if (loco != null)
                 {
-                    if (oldState.UnresolvedWaypoint != null)
+                    using (StateManager.TransactionScope())
                     {
-                        _waypointResolver.CleanupBeforeRemovingWaypoint(oldState.UnresolvedWaypoint);
+                        if (oldState.UnresolvedWaypoint != null)
+                        {
+                            _waypointResolver.CleanupBeforeRemovingWaypoint(oldState.UnresolvedWaypoint);
+                        }
+                        _autoEngineerService.CancelActiveOrders(loco);
                     }
-                    _autoEngineerService.CancelActiveOrders(oldState.Locomotive);
                 }
             }
 

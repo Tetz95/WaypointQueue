@@ -317,7 +317,7 @@ namespace WaypointQueue
             if (isReplacing && entry.Waypoints.Count > 0)
             {
                 waypoint.StatusLabel = "Running to waypoint";
-                if (entry.Waypoints[0].Id == entry.UnresolvedWaypoint.Id)
+                if (entry.Waypoints[0].Id == entry.UnresolvedWaypoint?.Id)
                 {
                     _waypointResolver.CleanupBeforeRemovingWaypoint(entry.UnresolvedWaypoint);
                     entry.UnresolvedWaypoint = waypoint;
@@ -348,10 +348,16 @@ namespace WaypointQueue
         {
             Location clampedLocation = location.Clamped();
             LocoWaypointState locoState = ModStateManager.Shared.GetLocoWaypointState(loco.id); ;
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, location, coupledToCarId);
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupledToCarId);
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             int beforeWaypointIndex = locoState.Waypoints?.FindIndex(w => w.Id == beforeWaypointId) ?? 0;
+            if (beforeWaypointIndex < 0)
+            {
+                // The waypoint to insert before was resolved or removed meanwhile; put the new one first.
+                Loader.LogDebug($"Waypoint {beforeWaypointId} to insert before no longer exists for {loco.Ident}; inserting at the front");
+                beforeWaypointIndex = 0;
+            }
 
             if (beforeWaypointIndex == 0)
             {
@@ -411,7 +417,8 @@ namespace WaypointQueue
 
         private void TryHandleLoopingRoutes()
         {
-            IEnumerable<RouteAssignment> assignmentsToCheck = ModStateManager.Shared.RouteAssignments.Values.Where(ra => ra.Loop);
+            // Copied, since assignments that no longer resolve are removed from the collection below.
+            List<RouteAssignment> assignmentsToCheck = ModStateManager.Shared.RouteAssignments.Values.Where(ra => ra.Loop).ToList();
 
             foreach (var assignment in assignmentsToCheck)
             {
@@ -452,7 +459,7 @@ namespace WaypointQueue
 
             ManagedWaypoint waypointToRemove = state.Waypoints[index];
 
-            if (waypointToRemove.Id == state.UnresolvedWaypoint.Id)
+            if (waypointToRemove.Id == state.UnresolvedWaypoint?.Id)
             {
                 state.UnresolvedWaypoint = null;
             }
