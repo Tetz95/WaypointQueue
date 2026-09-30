@@ -2,6 +2,7 @@
 using Game.State;
 using GalaSoft.MvvmLight.Messaging;
 using HarmonyLib;
+using Helpers;
 using Model;
 using Model.AI;
 using System;
@@ -58,9 +59,12 @@ namespace WaypointQueue
                         OriginalThrown = entry.Value,
                         LeftThrown = node.isThrown,
                         Planner = new WeakReference<AutoEngineerPlanner>(__instance),
-                        LocomotiveIdent = ____locomotive.Ident.ToString()
+                        Locomotive = new WeakReference<BaseLocomotive>(____locomotive),
+                        LocomotiveIdent = ____locomotive.Ident.ToString(),
+                        Position = node.transform.position.WorldToGame(),
+                        AddedAt = Time.unscaledTime
                     });
-                    Loader.Log($"Loco {____locomotive.Ident} couldn't reset switch {entry.Key} with the train on it; will reset it once the train is clear");
+                    Loader.LogDebug($"Loco {____locomotive.Ident} couldn't reset switch {entry.Key} with the train on it; will reset it once the train is clear");
                 }
             }
             catch (Exception ex)
@@ -82,10 +86,21 @@ namespace WaypointQueue
             public bool LeftThrown;
 
             public WeakReference<AutoEngineerPlanner> Planner;
+            public WeakReference<BaseLocomotive> Locomotive;
             public string LocomotiveIdent;
+
+            // Switch position (game space) and when it was added (unscaled time).
+            public Vector3 Position;
+            public float AddedAt;
         }
 
         private const float IntervalSeconds = 2f;
+
+        // Reset a switch only while the train that left it is still close by, as the game does for
+        // switches a train has just passed. A switch left longer, or by a train that has gone, may
+        // now be relied on by another train, so it is dropped instead of thrown.
+        private const float NearbyMeters = 200f;
+        private const float MaxAgeSeconds = 600f;
 
         private static readonly Dictionary<string, PendingSwitch> _pending = [];
         private static PendingSwitchRestorer _instance;
@@ -107,6 +122,15 @@ namespace WaypointQueue
                 DontDestroyOnLoad(go);
                 _instance = go.AddComponent<PendingSwitchRestorer>();
             }
+        }
+
+        // Called when the mod unloads, so nothing is thrown after the patches are removed.
+        internal static void Shutdown()
+        {
+            _pending.Clear();
+            if (_instance != null)
+                DestroyImmediate(_instance.gameObject);
+            _instance = null;
         }
 
         private void Awake()
@@ -147,14 +171,21 @@ namespace WaypointQueue
 
                     if (node.isThrown != pending.LeftThrown)
                     {
-                        Loader.Log($"Loco {pending.LocomotiveIdent}: switch {pending.NodeId} was changed by someone else; leaving it");
+                        Loader.LogDebug($"Loco {pending.LocomotiveIdent}: switch {pending.NodeId} was changed by someone else; leaving it");
                         done.Add(pending.NodeId);
                         continue;
                     }
 
                     if (node.IsCTCSwitch && !node.IsCTCSwitchUnlocked)
                     {
-                        Loader.Log($"Loco {pending.LocomotiveIdent}: switch {pending.NodeId} is under CTC control; leaving it to the dispatcher");
+                        Loader.LogDebug($"Loco {pending.LocomotiveIdent}: switch {pending.NodeId} is under CTC control; leaving it to the dispatcher");
+                        done.Add(pending.NodeId);
+                        continue;
+                    }
+
+                    if (Time.unscaledTime - pending.AddedAt > MaxAgeSeconds)
+                    {
+                        Loader.LogDebug($"Loco {pending.LocomotiveIdent}: switch {pending.NodeId} was left too long; leaving it");
                         done.Add(pending.NodeId);
                         continue;
                     }
@@ -162,8 +193,15 @@ namespace WaypointQueue
                     if (IsOnCurrentRoute(pending, node) || !trainController.CanSetSwitch(node, pending.OriginalThrown, out _))
                         continue;
 
+                    if (!IsTrainNearby(pending, graph))
+                    {
+                        Loader.LogDebug($"Loco {pending.LocomotiveIdent}: train is no longer near switch {pending.NodeId}; leaving it");
+                        done.Add(pending.NodeId);
+                        continue;
+                    }
+
                     if (trainController.TrySetSwitch(pending.NodeId, pending.OriginalThrown, "AE " + pending.LocomotiveIdent, out string error))
-                        Loader.Log($"Loco {pending.LocomotiveIdent}: reset switch {pending.NodeId} now that the train is clear");
+                        Loader.LogDebug($"Loco {pending.LocomotiveIdent}: reset switch {pending.NodeId} now that the train is clear");
                     else
                         Loader.LogError($"Loco {pending.LocomotiveIdent}: couldn't reset switch {pending.NodeId}: {error}");
 
@@ -178,6 +216,21 @@ namespace WaypointQueue
 
             foreach (string id in done)
                 _pending.Remove(id);
+        }
+
+        // Whether any car of the train that left the switch is still within NearbyMeters of it.
+        private static bool IsTrainNearby(PendingSwitch pending, Graph graph)
+        {
+            if (!pending.Locomotive.TryGetTarget(out BaseLocomotive locomotive) || locomotive == null)
+                return false;
+
+            foreach (Car car in locomotive.EnumerateCoupled())
+            {
+                if (Vector3.Distance(graph.GetPosition(car.LocationA), pending.Position) <= NearbyMeters
+                    || Vector3.Distance(graph.GetPosition(car.LocationB), pending.Position) <= NearbyMeters)
+                    return true;
+            }
+            return false;
         }
 
         // The AE's current route still needs the switch where it is, for example a move that comes
