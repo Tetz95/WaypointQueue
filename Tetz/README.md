@@ -70,7 +70,7 @@ git push origin main
 
 | Change | Branch (public fork) | Upstream |
 | --- | --- | --- |
-| Reset switches the train was on when it reached any waypoint (including Send past waypoint), once it's clear of them | `fix/restore-switches-after-waypoint` | Proposed on [issue #75](https://github.com/PrinceOfPluto/WaypointQueue/issues/75) as the fix |
+| Reset switches the train was on when it reached any waypoint (including Send past waypoint), once it's clear of them | `fix/restore-switches-after-waypoint` | Proposed on [issue #75](https://github.com/PrinceOfPluto/WaypointQueue/issues/75#issuecomment-5903965984) |
 | Don't crash when deleting or replacing a waypoint after the loco left Waypoint mode, inserting before a waypoint that was just resolved, removing the queue of a loco that no longer exists, or toggling Loop after the route was unassigned | `fix/crash-guards` | Not reported yet |
 | Save routes captured with "Overwrite/Add from Loco", and don't copy a waypoint's in-progress wait, refuel or coupling state into routes | `fix/route-capture` | Not reported yet |
 | Treat a coupling target that no longer exists as missing, so the waypoint is dropped instead of leaving the loco waiting forever | `fix/missing-couple-target` | Not reported yet |
