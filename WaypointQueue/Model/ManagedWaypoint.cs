@@ -495,9 +495,9 @@ namespace WaypointQueue
 
             try
             {
-                TrainController.Shared.TryGetCarForId(CoupleToCarId, out car);
+                bool found = TrainController.Shared.TryGetCarForId(CoupleToCarId, out car);
                 CoupleToCar = car;
-                return true;
+                return found && car != null;
             }
             catch (Exception e)
             {
