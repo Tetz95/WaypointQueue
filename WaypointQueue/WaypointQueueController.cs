@@ -49,6 +49,7 @@ namespace WaypointQueue
         public static float WaypointTickInterval = 0.5f;
         private readonly Dictionary<string, float> _timeSinceLastRerouteByLocoId = [];
         private readonly Queue<string> _rerouteRequestLocoIdQueue = [];
+        private readonly HashSet<string> _rerouteRequestLocoIdsQueued = [];
 
         private void Awake()
         {
@@ -141,7 +142,8 @@ namespace WaypointQueue
                         _timeSinceLastRerouteByLocoId[entry.LocomotiveId] = 0;
                     }
 
-                    if (_timeSinceLastRerouteByLocoId[entry.LocomotiveId] > 4f)
+                    // Queue each loco once; it stays due every tick until its reroute runs.
+                    if (_timeSinceLastRerouteByLocoId[entry.LocomotiveId] > 4f && _rerouteRequestLocoIdsQueued.Add(entry.LocomotiveId))
                     {
                         _rerouteRequestLocoIdQueue.Enqueue(entry.LocomotiveId);
                     }
@@ -238,6 +240,7 @@ namespace WaypointQueue
             if (_rerouteRequestLocoIdQueue.Count > 0)
             {
                 string locoId = _rerouteRequestLocoIdQueue.Dequeue();
+                _rerouteRequestLocoIdsQueued.Remove(locoId);
                 _timeSinceLastRerouteByLocoId[locoId] = 0;
                 RerouteCurrentWaypoint(locoId);
             }
