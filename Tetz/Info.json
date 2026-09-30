@@ -6,5 +6,5 @@
     "ManagerVersion": "0.31.0",
     "AssemblyName": "WaypointQueue.dll",
     "EntryMethod": "WaypointQueue.UUM.Loader.Load",
-    "HomePage": "https://github.com/Tetz95/WaypointQueue/tree/tetz"
+    "HomePage": "https://github.com/Tetz95/WaypointQueue-tetz"
 }
