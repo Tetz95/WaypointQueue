@@ -73,7 +73,7 @@ namespace WaypointQueue
             }
         }
 
-        private void HandleProcessingError(string orderType, Exception exception, ManagedWaypoint wp)
+        internal void HandleProcessingError(string orderType, Exception exception, ManagedWaypoint wp)
         {
             Loader.LogError($"Exception while processing waypoint: {exception}");
             Loader.Log($"Waypoint configuration:\n{wp}");

@@ -290,6 +290,22 @@ namespace WaypointQueue
             return needsEndOfTrackResolve || needsAlreadyCoupledResolve || needsResolveFromWaitingSkipped;
         }
 
+        /**
+         * A coupling waypoint whose car is already in the train before the waypoint starts. Once the waypoint has
+         * actually coupled, HasResolvedBrakeSystemOnCouple is set, so a waypoint that is re-sent after coupling
+         * (for example after leaving and re-entering waypoint mode) isn't caught.
+         */
+        private bool IsCouplingTargetAlreadyInTrain(ManagedWaypoint wp, out Car car)
+        {
+            car = null;
+            if (!wp.IsCoupling || wp.HasResolvedBrakeSystemOnCouple || !wp.TryResolveCoupleToCar(out car))
+            {
+                return false;
+            }
+            Car target = car;
+            return wp.Locomotive.EnumerateCoupled().Any(c => c.id == target.id);
+        }
+
         private bool IsUnresolvedWaypointAlreadyCoupled(ManagedWaypoint wp)
         {
             if (wp.IsCoupling && wp.TryResolveCoupleToCar(out Car car))
@@ -571,6 +587,17 @@ namespace WaypointQueue
             waypoint.StatusLabel = "Running to waypoint";
 
             state.UnresolvedWaypoint = waypoint;
+
+            if (IsCouplingTargetAlreadyInTrain(waypoint, out Car coupledCar))
+            {
+                // Otherwise the waypoint counts as coupled at once, and any post-coupling cut is
+                // calculated from a car in the middle of the train
+                _autoEngineerService.CancelActiveOrders(state.Locomotive);
+                var error = new CouplingException($"{waypoint.Locomotive.Ident} can't couple to {coupledCar.Ident} because it's already in {waypoint.Locomotive.Ident}'s train, probably picked up by an earlier waypoint. Delete this waypoint and add one without coupling, or couple to a different car.", waypoint);
+                _waypointResolver.HandleProcessingError("Coupling", error, waypoint);
+                ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+                return;
+            }
 
             Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
             _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId);

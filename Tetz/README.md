@@ -81,6 +81,8 @@ git push origin main
 | Store wait times culture-invariant, so saves read back correctly on machines with a comma decimal separator | `fix/invariant-number-storage` | Not reported yet |
 | Uncoupling by destination with no matching car no longer tries to cut the whole train (or silently drop every car after coupling); it leaves the train as it is and says so in the console | `tetz` only | Same bug as [#74](https://github.com/PrinceOfPluto/WaypointQueue/issues/74) and [#70](https://github.com/PrinceOfPluto/WaypointQueue/issues/70) |
 | Count uncoupled cars from the train end nearest the waypoint, not from the locomotive end nearest it, so a train on curved track isn't read backwards | `tetz` only | [#70](https://github.com/PrinceOfPluto/WaypointQueue/issues/70) |
+| Pause a coupling waypoint with an error when its car is already in the train when the waypoint starts (for example, picked up by an earlier waypoint), instead of treating it as coupled and cutting from the middle of the train | `tetz` only | [#72](https://github.com/PrinceOfPluto/WaypointQueue/issues/72) |
+| A non-stop waypoint passed at 35 mph or more is only counted as reached when the locomotive is within 25 m of it along the track, not in a straight line, so a train on a parallel track no longer "arrives" (the same for the end-of-track check) | `tetz` only | [#73](https://github.com/PrinceOfPluto/WaypointQueue/issues/73) |
 | Unit tests run again: test locomotives are mocked as `BaseLocomotive` | `tetz` only | |
 
 `fix/send-past-restore-switches` on the public fork is an earlier, Send-past-only version of this fix. It's no longer in this version, but the branch is kept in case upstream prefers the narrower change.

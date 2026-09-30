@@ -154,15 +154,16 @@ namespace WaypointQueue
 
                 Location targetLoc = ____routeTargetLocation.Value;
 
-                float bestDistance;
+                bool isWithinRadius;
                 try
                 {
                     Location locF = ____locomotive.LocationF;
                     Location locR = ____locomotive.LocationR;
 
-                    float dF = Mathf.Abs(____graph.GetDistanceBetweenClose(targetLoc, locF));
-                    float dR = Mathf.Abs(____graph.GetDistanceBetweenClose(targetLoc, locR));
-                    bestDistance = Mathf.Min(dF, dR);
+                    // Measure along the track as the switches are lined, not in a straight line: a locomotive
+                    // passing on a parallel track can be well within the radius without being anywhere near the waypoint
+                    isWithinRadius = ____graph.CheckSameRoute(locF, targetLoc, HighSpeedWaypointRadiusMeters)
+                        || ____graph.CheckSameRoute(locR, targetLoc, HighSpeedWaypointRadiusMeters);
                 }
                 catch (Exception ex)
                 {
@@ -170,7 +171,7 @@ namespace WaypointQueue
                     return;
                 }
 
-                if (bestDistance <= HighSpeedWaypointRadiusMeters)
+                if (isWithinRadius)
                 {
                     __result = true;
                 }
