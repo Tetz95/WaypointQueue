@@ -16,7 +16,7 @@ namespace WaypointQueue.Model
         {
             var dictionary = new Dictionary<string, Value>
             {
-                [KeyDelayBleedUntilGameTotalSeconds] = Value.String(DelayBleedUntilGameTotalSeconds.ToString()),
+                [KeyDelayBleedUntilGameTotalSeconds] = Value.String(ManagedWaypoint.FormatStoredDouble(DelayBleedUntilGameTotalSeconds)),
                 [KeyCarIds] = Value.Array(CarIds.Select(c => Value.String(c)).ToList())
             };
 
@@ -27,7 +27,7 @@ namespace WaypointQueue.Model
         {
             if (value.IsNull || value.Type != ValueType.Dictionary) { return new DelayedBleedAirCutEntry(0, []); }
 
-            return new DelayedBleedAirCutEntry(System.Convert.ToDouble(value.DictionaryValue[KeyDelayBleedUntilGameTotalSeconds].StringValue), value.DictionaryValue[KeyCarIds].ArrayValue.Select(v => v.StringValue).ToList());
+            return new DelayedBleedAirCutEntry(ManagedWaypoint.ParseStoredDouble(value.DictionaryValue[KeyDelayBleedUntilGameTotalSeconds].StringValue), value.DictionaryValue[KeyCarIds].ArrayValue.Select(v => v.StringValue).ToList());
         }
     }
 }

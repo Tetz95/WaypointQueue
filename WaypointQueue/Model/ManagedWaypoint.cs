@@ -5,6 +5,7 @@ using Model.Ops;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Track;
 using UnityEngine;
@@ -661,6 +662,26 @@ namespace WaypointQueue
             Errors = [];
         }
 
+        // Doubles stored as strings are written culture-invariant, so a save written on a machine with
+        // a comma decimal separator reads back the same everywhere.
+        internal static string FormatStoredDouble(double value)
+        {
+            return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        // Older versions wrote these with the machine's culture and double.ToString(), which never adds
+        // group separators, so a comma with no period is a decimal separator.
+        internal static double ParseStoredDouble(string value)
+        {
+            if (String.IsNullOrEmpty(value))
+                return 0;
+
+            if (value.IndexOf(',') >= 0 && value.IndexOf('.') < 0)
+                value = value.Replace(',', '.');
+
+            return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
         public override string ToString()
         {
             return JsonConvert.SerializeObject(this, Formatting.Indented);
@@ -778,7 +799,7 @@ namespace WaypointQueue
                 [ValueKeys.WaitUntilTimeString] = Value.String(WaitUntilTimeString),
                 [ValueKeys.WaitUntilDay] = Value.Int((int)WaitUntilDay),
                 [ValueKeys.WaitForDurationMinutes] = Value.Int(WaitForDurationMinutes),
-                [ValueKeys.WaitUntilGameTotalSeconds] = Value.String(WaitUntilGameTotalSeconds.ToString()),
+                [ValueKeys.WaitUntilGameTotalSeconds] = Value.String(FormatStoredDouble(WaitUntilGameTotalSeconds)),
                 [ValueKeys.StopAtWaypoint] = Value.Bool(StopAtWaypoint),
                 [ValueKeys.WillLimitPassingSpeed] = Value.Bool(WillLimitPassingSpeed),
                 [ValueKeys.WaypointTargetSpeed] = Value.Int(WaypointTargetSpeed),
@@ -844,7 +865,7 @@ namespace WaypointQueue
             waypoint.WaitUntilTimeString = dict[ValueKeys.WaitUntilTimeString].StringValue;
             waypoint.WaitUntilDay = (TodayOrTomorrow)dict[ValueKeys.WaitUntilDay].IntValue;
             waypoint.WaitForDurationMinutes = dict[ValueKeys.WaitForDurationMinutes].IntValue;
-            waypoint.WaitUntilGameTotalSeconds = Convert.ToDouble(dict[ValueKeys.WaitUntilGameTotalSeconds].StringValue);
+            waypoint.WaitUntilGameTotalSeconds = ParseStoredDouble(dict[ValueKeys.WaitUntilGameTotalSeconds].StringValue);
             waypoint.StopAtWaypoint = dict[ValueKeys.StopAtWaypoint].BoolValue;
             waypoint.WillLimitPassingSpeed = dict[ValueKeys.WillLimitPassingSpeed].BoolValue;
             waypoint.WaypointTargetSpeed = dict[ValueKeys.WaypointTargetSpeed].IntValue;
