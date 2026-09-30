@@ -7,11 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WaypointQueue", "WaypointQu
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7931003F-A99D-4FA4-B89B-428D713D2AC1}"
 	ProjectSection(SolutionItems) = preProject
+		.gitattributes = .gitattributes
 		Info.json = Info.json
 		Paths.user.example = Paths.user.example
 		README.md = README.md
-		repository.json = repository.json
-		UpdateVersion.ps1 = UpdateVersion.ps1
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WaypointQueue.Tests", "WaypointQueue.Tests\WaypointQueue.Tests.csproj", "{1FB13E05-C65B-4575-BC7F-E977A2479D12}"

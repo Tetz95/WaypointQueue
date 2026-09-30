@@ -1,11 +1,10 @@
 {
     "Id": "WaypointQueue",
-    "DisplayName": "Waypoint Queue",
-    "Author": "PrinceOfPluto",
-    "Version": "1.0.0",
+    "DisplayName": "Waypoint Queue (Tetz fork)",
+    "Author": "PrinceOfPluto, Tetz95",
+    "Version": "1.8.2.7",
     "ManagerVersion": "0.31.0",
     "AssemblyName": "WaypointQueue.dll",
     "EntryMethod": "WaypointQueue.UUM.Loader.Load",
-    "HomePage": "https://www.nexusmods.com/railroader/mods/1029",
-    "Repository": "https://raw.githubusercontent.com/PrinceOfPluto/WaypointQueue/refs/heads/main/repository.json"
+    "HomePage": "https://github.com/Tetz95/WaypointQueue-tetz"
 }
