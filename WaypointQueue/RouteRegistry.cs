@@ -36,6 +36,7 @@ namespace WaypointQueue
 
         public static RouteDefinition GetById(string routeId)
         {
+            if (string.IsNullOrEmpty(routeId)) return null;
             if (Routes.TryGetValue(routeId, out var route)) return route;
             return null;
         }
@@ -141,6 +142,11 @@ namespace WaypointQueue
 
             RouteDefinition route = Routes[routeId];
             int beforeWaypointIndex = route.Waypoints?.FindIndex(w => w.Id == beforeWaypointId) ?? 0;
+            if (beforeWaypointIndex < 0)
+            {
+                // The waypoint to insert before was removed meanwhile; put the new one first.
+                beforeWaypointIndex = 0;
+            }
             route.Waypoints.Insert(beforeWaypointIndex, waypoint);
 
             ModStateManager.Shared.SaveRoute(route);
