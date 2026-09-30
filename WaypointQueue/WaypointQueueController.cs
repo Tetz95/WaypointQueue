@@ -61,6 +61,8 @@ namespace WaypointQueue
 
         private void OnMapWillUnload(MapWillUnloadEvent @event)
         {
+            PatchAutoEngineerPlanner.ClearSwitchesToRestoreAfterMovePast();
+
             if (_coroutine != null)
             {
                 Loader.LogDebug($"OnMapWillUnload stopping coroutine in WaypointQueueController OnMapWillUnload");
