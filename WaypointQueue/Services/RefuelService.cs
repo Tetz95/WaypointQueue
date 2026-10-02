@@ -27,6 +27,11 @@ namespace WaypointQueue.Services
 
         private readonly Dictionary<string, float> _cachedCarLoadQuantityByFuelCarId = [];
 
+        // Modded loaders (e.g. AlinasMapMod LoaderBuilder splineys built by RailForge) can be created
+        // after PropertiesDidRestore, so the collections are refreshed when they may be stale.
+        private const float StaleCollectionsSeconds = 10f;
+        private float _lastRebuildTime = float.NegativeInfinity;
+
         public void RebuildCollections()
         {
             _carLoadTargetLoaders.Clear();
@@ -34,6 +39,17 @@ namespace WaypointQueue.Services
 
             _carLoadTargetLoaders = [.. UnityEngine.Object.FindObjectsOfType<CarLoadTargetLoader>()];
             _carLoaderSequencers = [.. UnityEngine.Object.FindObjectsOfType<CarLoaderSequencer>()];
+            _lastRebuildTime = Time.realtimeSinceStartup;
+        }
+
+        private void RebuildCollectionsIfStale()
+        {
+            if (Time.realtimeSinceStartup - _lastRebuildTime > StaleCollectionsSeconds
+                || _carLoadTargetLoaders.Any(l => l == null)
+                || _carLoaderSequencers.Any(s => s == null))
+            {
+                RebuildCollections();
+            }
         }
 
         public void OrderToRefuel(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper, out List<BaseLocomotive> locosForRefuelList)
@@ -257,9 +273,11 @@ namespace WaypointQueue.Services
             CarLoadTargetLoader closestLoader = null;
             float shortestDistance = 0;
 
+            RebuildCollectionsIfStale();
+
             foreach (CarLoadTargetLoader targetLoader in _carLoadTargetLoaders)
             {
-                if (!validLoads.Contains(targetLoader.load?.name?.ToLower()))
+                if (targetLoader == null || !validLoads.Contains(targetLoader.load?.name?.ToLower()))
                 {
                     continue;
                 }
@@ -399,6 +417,11 @@ namespace WaypointQueue.Services
             CarLoadTargetLoader loaderTarget = FindCarLoadTargetLoader(waypoint);
             if (loaderTarget == null)
             {
+                RebuildCollections();
+                loaderTarget = FindCarLoadTargetLoader(waypoint);
+            }
+            if (loaderTarget == null)
+            {
                 Loader.LogError($"_carLoadTargetLoaders: {String.Join("-", _carLoadTargetLoaders.Select(c => $"[{c.keyValueObject.RegisteredId}, {waypoint.RefuelLoadName} loader]"))}");
                 var message = $"Cannot find valid CarLoadTargetLoader for \"{waypoint.RefuelLoadName}\" at point {waypoint.RefuelPoint} with registered id {waypoint.RefuelLoaderRegisteredId}.";
                 Loader.LogError(message);
@@ -407,8 +430,9 @@ namespace WaypointQueue.Services
                     // Only throw if we are trying to activate the loader. If we're just cleaning up then it can fail silently.
                     throw new RefuelException(message, waypoint);
                 }
+                return;
             }
-            CarLoaderSequencer sequencer = _carLoaderSequencers.Find(x => x.keyValueObject.RegisteredId == loaderTarget.keyValueObject.RegisteredId);
+            CarLoaderSequencer sequencer = _carLoaderSequencers.Find(x => x != null && x.keyValueObject.RegisteredId == loaderTarget.keyValueObject.RegisteredId);
             if (sequencer != null)
             {
                 StateManager.ApplyLocal(new PropertyChange(sequencer.keyValueObject.RegisteredId, sequencer.readWantsLoadingKey, new BoolPropertyValue(value)));
@@ -432,7 +456,7 @@ namespace WaypointQueue.Services
             // First try to find by registered id
             if (!String.IsNullOrEmpty(waypoint.RefuelLoaderRegisteredId))
             {
-                loader = _carLoadTargetLoaders.Find(l => l.keyValueObject.RegisteredId == waypoint.RefuelLoaderRegisteredId);
+                loader = _carLoadTargetLoaders.Find(l => l != null && l.keyValueObject.RegisteredId == waypoint.RefuelLoaderRegisteredId);
             }
 
             // If that fails, then try to find by position
@@ -440,7 +464,7 @@ namespace WaypointQueue.Services
             {
                 Vector3 worldPosition = WorldTransformer.GameToWorld(waypoint.RefuelPoint);
                 //Loader.LogDebug($"Starting search for target loader matching world point {worldPosition}");
-                loader = _carLoadTargetLoaders.Find(l => l.transform.position == worldPosition);
+                loader = _carLoadTargetLoaders.Find(l => l != null && l.transform.position == worldPosition);
                 //Loader.LogDebug($"Found matching {loader.load.name} loader at game point {waypoint.RefuelPoint}");
             }
 

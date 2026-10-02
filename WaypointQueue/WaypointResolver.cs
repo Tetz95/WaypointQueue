@@ -483,7 +483,11 @@ namespace WaypointQueue
 
         private BaseLocomotive GetNextLocomotiveForRefuel(ManagedWaypoint waypoint)
         {
-            return carService.GetLocoById(waypoint.RefuelLocoIdsQueue.FirstOrDefault());
+            if (waypoint.RefuelLocoIdsQueue.Count == 0)
+            {
+                return null;
+            }
+            return carService.GetLocoById(waypoint.RefuelLocoIdsQueue.First());
         }
 
         internal bool IsTrainStopped(ManagedWaypoint wp)
