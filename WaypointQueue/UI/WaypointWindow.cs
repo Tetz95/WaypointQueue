@@ -943,7 +943,7 @@ namespace WaypointQueue.UI
 
                 By specific car - Choose a specific car to uncouple and which direction to cut the consist.
 
-                All except locomotives - Uncouples all cars except locomotives and tenders.
+                All except locomotives - Uncouples all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are cut with the cars.
                 """;
 
             if (waypoint.WillPostCoupleCutPickup)

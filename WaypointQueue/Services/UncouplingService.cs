@@ -381,7 +381,16 @@ namespace WaypointQueue
         {
             Loader.Log($"Resolving uncoupling all except locomotives for {waypoint.Locomotive.Ident}");
             List<Car> consist = [.. waypoint.Locomotive.EnumerateCoupled(LogicalEnd.A)];
-            List<CarArchetype> locoArchetypes = [CarArchetype.LocomotiveDiesel, CarArchetype.LocomotiveSteam, CarArchetype.Tender];
+
+            // Only the locomotives working the train stay; ones being hauled dead are cut with the cars
+            HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(waypoint.Locomotive);
+            bool IsKept(Car car) => workingLocoIds.Contains(car.id);
+
+            List<Car> inTowLocos = [.. consist.Where(c => carService.IsCarLocomotiveType(c) && !IsKept(c))];
+            if (inTowLocos.Count > 0)
+            {
+                Loader.Log($"Cutting {CarListToString(inTowLocos)} with the cars as locomotives in tow");
+            }
 
             List<List<Car>> listOfCarBlocks = [[]];
 
@@ -394,8 +403,8 @@ namespace WaypointQueue
                 if (i < consist.Count - 1)
                 {
                     Car nextCar = consist[i + 1];
-                    bool currentCarIsLocoType = locoArchetypes.Contains(currentCar.Archetype);
-                    bool nextCarIsLocoType = locoArchetypes.Contains(nextCar.Archetype);
+                    bool currentCarIsLocoType = IsKept(currentCar);
+                    bool nextCarIsLocoType = IsKept(nextCar);
 
                     if ((currentCarIsLocoType && !nextCarIsLocoType) || (!currentCarIsLocoType && nextCarIsLocoType))
                     {
@@ -418,7 +427,7 @@ namespace WaypointQueue
                         UncoupleCar(lastCar, LogicalEnd.B);
                     }
 
-                    if (!locoArchetypes.Contains(lastCar.Archetype))
+                    if (!IsKept(lastCar))
                     {
                         if (waypoint.ApplyHandbrakesOnUncouple)
                         {

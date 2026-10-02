@@ -246,6 +246,66 @@ namespace WaypointQueue.Services
             return car.Archetype == CarArchetype.LocomotiveDiesel || car.Archetype == CarArchetype.LocomotiveSteam || car.Archetype == CarArchetype.Tender;
         }
 
+        private static readonly PropertyInfo IsMuEnabledProperty = AccessTools.Property(typeof(BaseLocomotive), "IsMuEnabled");
+        private static readonly MethodInfo FindMuSourceLocomotiveMethod = AccessTools.Method(typeof(BaseLocomotive), "FindMuSourceLocomotive");
+
+        /**
+         * Ids of the locomotives working the lead's train, and their tenders: the lead itself and every locomotive
+         * with MU enabled whose MU source is (through any chain of MU units) the lead. Any other locomotive in the
+         * consist is being hauled dead, in tow.
+         */
+        public HashSet<string> GetWorkingLocomotiveIds(BaseLocomotive lead)
+        {
+            List<Car> consist = [.. lead.EnumerateCoupled()];
+            HashSet<string> working = [lead.id];
+
+            if (IsMuEnabledProperty == null || FindMuSourceLocomotiveMethod == null)
+            {
+                Loader.LogError("Can't read MU state from the game; treating every locomotive as working");
+                return [.. consist.Where(IsCarLocomotiveType).Select(c => c.id)];
+            }
+
+            foreach (BaseLocomotive loco in consist.OfType<BaseLocomotive>())
+            {
+                if (IsWorkingLocomotive(loco, lead, []))
+                {
+                    working.Add(loco.id);
+                }
+            }
+
+            foreach (Car car in consist)
+            {
+                if (car.Archetype == CarArchetype.LocomotiveSteam && working.Contains(car.id) && PatchSteamLocomotive.TryGetTender(car, out Car tender))
+                {
+                    working.Add(tender.id);
+                }
+                else if (car.Archetype == CarArchetype.Tender && car.TryGetAdjacentCar(car.EndToLogical(End.F), out Car parentLoco) && working.Contains(parentLoco.id))
+                {
+                    working.Add(car.id);
+                }
+            }
+
+            return working;
+        }
+
+        private bool IsWorkingLocomotive(BaseLocomotive loco, BaseLocomotive lead, HashSet<string> visited)
+        {
+            if (loco == lead) return true;
+            if (!visited.Add(loco.id)) return false;
+
+            try
+            {
+                if (!(bool)IsMuEnabledProperty.GetValue(loco)) return false;
+                BaseLocomotive source = FindMuSourceLocomotiveMethod.Invoke(loco, null) as BaseLocomotive;
+                return source != null && source != loco && IsWorkingLocomotive(source, lead, visited);
+            }
+            catch (System.Exception e)
+            {
+                Loader.LogError($"Couldn't read MU state for {loco.Ident}: {e.Message}");
+                return false;
+            }
+        }
+
         public bool ShouldPeriodicReroute(BaseLocomotive locomotive)
         {
             if (locomotive.KeyValueObject.Keys.Contains(ModStateManager.PeriodicRerouteKeyOnLoco))

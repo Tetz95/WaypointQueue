@@ -110,5 +110,6 @@ git push origin main
 | Pause a coupling waypoint with an error when its car is already in the train when the waypoint starts (for example, picked up by an earlier waypoint), instead of treating it as coupled and cutting from the middle of the train | `tetz` only | [#72](https://github.com/PrinceOfPluto/WaypointQueue/issues/72) |
 | A non-stop waypoint passed at 35 mph or more is only counted as reached when the locomotive is within 25 m of it along the track, not in a straight line, so a train on a parallel track no longer "arrives" (the same for the end-of-track check) | `tetz` only | [#73](https://github.com/PrinceOfPluto/WaypointQueue/issues/73) |
 | Unit tests run again: test locomotives are mocked as `BaseLocomotive` | `tetz` only | |
+| "All except locomotives" keeps only the locomotives working the train (the lead and any MU'd to it) and their tenders; locomotives hauled dead, in tow, are cut with the cars | `tetz` only | |
 
 `fix/send-past-restore-switches` on the public fork is an earlier, Send-past-only version of this fix. It's no longer in this version, but the branch is kept in case upstream prefers the narrower change.
