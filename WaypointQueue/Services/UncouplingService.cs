@@ -22,16 +22,7 @@ namespace WaypointQueue
         {
             List<Car> consistFromEnd = GetConsistForCutFromEnd(wp);
 
-            // Count only cars before the locomotives working the train: with fewer cars than asked for (or a light
-            // engine), taking N from the end would include the locomotive itself.
-            HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(wp.Locomotive) ?? [wp.Locomotive.id];
-            int available = consistFromEnd.TakeWhile(c => !workingLocoIds.Contains(c.id)).Count();
-            if (available < wp.NumberOfCarsToCut)
-            {
-                Loader.Log($"{wp.Locomotive.Ident} has {available} car(s) to cut, fewer than the {wp.NumberOfCarsToCut} asked for");
-            }
-
-            List<Car> carsToCut = [.. consistFromEnd.Take(Math.Min(wp.NumberOfCarsToCut, available))];
+            List<Car> carsToCut = [.. consistFromEnd.Take(wp.NumberOfCarsToCut)];
             return carsToCut;
         }
 
