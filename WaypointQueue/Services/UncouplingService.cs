@@ -421,10 +421,14 @@ namespace WaypointQueue
                 {
                     Car lastCar = block.Last();
 
-                    if (i != listOfCarBlocks.Count - 1)
+                    if (i != listOfCarBlocks.Count - 1 && listOfCarBlocks[i + 1].Count > 0)
                     {
-                        Loader.Log($"Uncoupling {lastCar.Ident} on logical end B for block {block.Count} cars");
-                        UncoupleCar(lastCar, LogicalEnd.B);
+                        // Uncouple at the end facing the next block: a car can face either way in the consist, so its
+                        // end B isn't necessarily toward the next car.
+                        Car nextCar = listOfCarBlocks[i + 1][0];
+                        LogicalEnd endTowardNext = lastCar.CoupledTo(LogicalEnd.A) == nextCar ? LogicalEnd.A : LogicalEnd.B;
+                        Loader.Log($"Uncoupling {lastCar.Ident} on logical end {LogicalEndToString(endTowardNext)} for block {block.Count} cars");
+                        UncoupleCar(lastCar, endTowardNext);
                     }
 
                     if (!IsKept(lastCar))
@@ -600,6 +604,14 @@ namespace WaypointQueue
                 throw new UncouplingException(e.Message, waypoint, e);
             }
 
+            // FindCarToUncouple picks the end by position in the consist list, assuming every car faces the same way.
+            // The car across the uncouple point must be outside the cut; if it isn't, this car faces backwards.
+            Car across = carToUncouple.CoupledTo(endToUncouple);
+            if (across == null || carsToCut.Contains(across))
+            {
+                endToUncouple = endToUncouple == LogicalEnd.A ? LogicalEnd.B : LogicalEnd.A;
+            }
+
             Loader.Log($"Uncoupling {carToUncouple.Ident} on end {LogicalEndToString(endToUncouple)} for cut of {carsToCut.Count} cars");
 
             UncoupleCar(carToUncouple, endToUncouple);
@@ -634,7 +646,6 @@ namespace WaypointQueue
 
         private void UncoupleCar(Car car, LogicalEnd endToUncouple)
         {
-            LogicalEnd oppositeEnd = endToUncouple == LogicalEnd.A ? LogicalEnd.B : LogicalEnd.A;
             Loader.LogDebug($"Trying to uncouple {car.Ident} on logical end {LogicalEndToString(endToUncouple)}");
 
             if (StateManager.IsHost && car.set != null)
@@ -642,13 +653,17 @@ namespace WaypointQueue
                 Car adjacent = car.CoupledTo(endToUncouple);
                 if (adjacent != null)
                 {
-                    Loader.Log($"Uncoupling {car.Ident} and {adjacent.Ident}");
+                    // The adjacent car's end facing this car isn't necessarily the opposite logical end: when the two
+                    // cars face each other it's the same letter. Working on the wrong end pulled the cut lever and
+                    // closed the air on the adjacent car's far end, leaving the cars coupled (BEW 12, 2026-10-06).
+                    LogicalEnd adjacentEnd = adjacent.CoupledTo(LogicalEnd.A) == car ? LogicalEnd.A : LogicalEnd.B;
+                    Loader.Log($"Uncoupling {car.Ident} and {adjacent.Ident} (its end {LogicalEndToString(adjacentEnd)})");
                     car.ApplyEndGearChange(endToUncouple, EndGearStateKey.Anglecock, f: 0f);
                     car.ApplyEndGearChange(endToUncouple, EndGearStateKey.IsAirConnected, boolValue: false);
 
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.CutLever, 1f);
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.Anglecock, f: 0f);
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.IsAirConnected, boolValue: false);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.CutLever, 1f);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.Anglecock, f: 0f);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.IsAirConnected, boolValue: false);
                 }
                 else
                 {
