@@ -74,14 +74,23 @@ namespace WaypointQueue.UI
 
                 BuildSubheaderLabel(builder, "Queue Paused");
                 builder.AddLabelMarkup($"""
-                    - <indent=20f>The waypoint queue for {wp.Locomotive.Ident} will remain <b>PAUSED</b> until this waypoint is deleted.
+                    - <indent=20f>The waypoint queue for {wp.Locomotive.Ident} will remain <b>PAUSED</b> until this waypoint is resumed or deleted.
+                    - <indent=20f>Resume runs the waypoint's orders again with its current settings, so fix the setting first if that caused the error.
                     - <indent=20f>You may view this error message again in the waypoints window for {wp.Locomotive.Ident}.
                     """).HorizontalTextAlignment(HorizontalAlignmentOptions.Left);
 
-                builder.AddButtonMedium("Delete waypoint", () =>
+                builder.HStack(builder =>
                 {
-                    WaypointQueueController.Shared.RemoveWaypoint(wp);
-                    dismiss?.Invoke();
+                    builder.AddButtonMedium("Resume waypoint", () =>
+                    {
+                        WaypointQueueController.Shared.ResumeWaypoint(wp);
+                        dismiss?.Invoke();
+                    });
+                    builder.AddButtonMedium("Delete waypoint", () =>
+                    {
+                        WaypointQueueController.Shared.RemoveWaypoint(wp);
+                        dismiss?.Invoke();
+                    });
                 });
 
                 builder.Spacer(16f);

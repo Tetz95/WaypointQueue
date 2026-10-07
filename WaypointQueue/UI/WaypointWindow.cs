@@ -533,6 +533,10 @@ namespace WaypointQueue.UI
                 {
                     ErrorModalController.Shared.ShowProcessingErrorModal(error.Message, error.ErrorType, waypoint);
                 });
+                field.AddButton("Resume", () =>
+                {
+                    WaypointQueueController.Shared.ResumeWaypoint(waypoint);
+                });
             }));
         }
 

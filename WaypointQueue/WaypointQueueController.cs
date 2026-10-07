@@ -518,6 +518,16 @@ namespace WaypointQueue
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
         }
 
+        // Clears a waypoint's errors so the queue picks it up again: its remaining orders run again with the waypoint's
+        // current settings (change them first if the error came from a setting).
+        public void ResumeWaypoint(ManagedWaypoint waypoint)
+        {
+            Loader.Log($"Resuming the waypoint for {waypoint.Locomotive.Ident} after {waypoint.Errors.Count} error(s)");
+            waypoint.Errors = [];
+            waypoint.StatusLabel = "Running to waypoint";
+            UpdateWaypoint(waypoint);
+        }
+
         public void ReorderWaypoint(ManagedWaypoint waypoint, int newIndex)
         {
             LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId);
