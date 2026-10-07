@@ -695,6 +695,14 @@ namespace WaypointQueue
             if (waypoint.WillUncoupleByCount && waypoint.NumberOfCarsToCut > 0)
             {
                 carsToCut = uncouplingService.FindCutByCount(waypoint);
+
+                if (carsToCut.Count == 0)
+                {
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to cut (asked for {waypoint.NumberOfCarsToCut}), so no cars were uncoupled.";
+                    Console.Log(message);
+                    Loader.Log(message);
+                    return;
+                }
             }
 
             if (waypoint.WillUncoupleByDestination && !string.IsNullOrEmpty(waypoint.UncoupleDestinationId))
