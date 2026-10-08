@@ -477,7 +477,11 @@ namespace WaypointQueue
         {
             List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
 
-            List<Car> carsToDropoff = GetFirstCarBlockWithNoLocomotives(carsAvailableForDropoff, excludeMatchFromCut: true);
+            // Drop everything up to the locomotives working the train, as uncoupling all except locomotives does:
+            // locomotives hauled dead, in tow, go with the cars. Stopping at any locomotive found no cars to drop
+            // when in-tow units sat next to the coupled car.
+            HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(wp.Locomotive);
+            List<Car> carsToDropoff = FindMatchingCarBlock(carsAvailableForDropoff, car => workingLocoIds.Contains(car.id), excludeMatchingCars: true);
 
             List<Car> carsToCut = [];
             if (carsToDropoff.Count > 0)

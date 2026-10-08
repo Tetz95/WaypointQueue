@@ -986,7 +986,7 @@ namespace WaypointQueue.UI
                 
                 By specific car - Choose a specific car to dropoff.
                 
-                All except locomotives - Dropoff all cars except locomotives and tenders.
+                All except locomotives - Dropoff all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are dropped with the cars.
                 """;
             }
 

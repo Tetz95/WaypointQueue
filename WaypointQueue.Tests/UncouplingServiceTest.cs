@@ -383,9 +383,11 @@ namespace WaypointQueue.Tests
         }
 
         [Theory]
-        [InlineData(4, 7, "0", "6")]
-        [InlineData(9, 12, "0", "11")]
-        public void FindDropoffAllExceptLocomotives(int indexOfCoupled, int expectedCount, string expectedFirstId, string expectedLastId)
+        [InlineData(4, 7, "0", "6", true)]
+        [InlineData(9, 12, "0", "11", true)]
+        // Locomotive 7 hauled dead, in tow: it's dropped with the cars, up to the working locomotive 12
+        [InlineData(4, 12, "0", "11", false)]
+        public void FindDropoffAllExceptLocomotives(int indexOfCoupled, int expectedCount, string expectedFirstId, string expectedLastId, bool loco7Working)
         {
             var locoMock = GenerateMockCar(7, isLoco: true);
             var locoMock2 = GenerateMockCar(12, isLoco: true);
@@ -418,6 +420,8 @@ namespace WaypointQueue.Tests
             reversedConsist.Reverse();
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(carCoupledTo, Car.LogicalEnd.A)).Returns(reversedConsist);
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(carCoupledTo, Car.LogicalEnd.B)).Returns(consist);
+
+            _carServiceMock.Setup(cs => cs.GetWorkingLocomotiveIds(It.IsAny<BaseLocomotive>())).Returns(loco7Working ? ["7", "12"] : ["12"]);
 
             var result = _sut.FindDropoffAllExceptLocomotives(mockedWaypoint.Object, carCoupledTo);
 
