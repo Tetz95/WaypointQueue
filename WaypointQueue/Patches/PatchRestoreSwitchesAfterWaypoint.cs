@@ -18,6 +18,10 @@ namespace WaypointQueue
     // then forgets them all, skipping any switch a car is still on. A train that stops on a switch
     // it threw therefore leaves it thrown after it moves off. Keep those switches and reset each one
     // once the train is clear of it.
+    //
+    // ClearRoute forgets them too, without resetting any. It runs as soon as the waypoint is cleared (the planner
+    // handles order changes at once), so cancelling a waypoint and sending the next one straight away, as the queue
+    // does, left every switch the old route had thrown and not yet reset. Those go to the same restorer.
     [HarmonyPatch(typeof(AutoEngineerPlanner))]
     internal class PatchRestoreSwitchesAfterWaypoint
     {
@@ -44,32 +48,59 @@ namespace WaypointQueue
         {
             try
             {
-                if (__state == null || ____locomotive == null || ____graph == null)
-                    return;
-
-                foreach (KeyValuePair<string, bool> entry in __state)
-                {
-                    TrackNode node = ____graph.GetNode(entry.Key);
-                    if (node == null || node.isThrown == entry.Value)
-                        continue;
-
-                    PendingSwitchRestorer.Add(new PendingSwitchRestorer.PendingSwitch
-                    {
-                        NodeId = entry.Key,
-                        OriginalThrown = entry.Value,
-                        LeftThrown = node.isThrown,
-                        Planner = new WeakReference<AutoEngineerPlanner>(__instance),
-                        Locomotive = new WeakReference<BaseLocomotive>(____locomotive),
-                        LocomotiveIdent = ____locomotive.Ident.ToString(),
-                        Position = node.transform.position.WorldToGame(),
-                        AddedAt = Time.unscaledTime
-                    });
-                    Loader.LogDebug($"Loco {____locomotive.Ident} couldn't reset switch {entry.Key} with the train on it; will reset it once the train is clear");
-                }
+                KeepUnrestored(__instance, ____locomotive, ____graph, __state, "with the train on it");
             }
             catch (Exception ex)
             {
                 Loader.LogError($"PatchRestoreSwitchesAfterWaypoint postfix failed: {ex}");
+            }
+        }
+
+        // Runs before ClearRoute empties the list (after RestoreAllRemainingSwitches it's already empty).
+        [HarmonyPrefix]
+        [HarmonyPatch("ClearRoute")]
+        private static void ClearRoutePrefix(
+            AutoEngineerPlanner __instance,
+            BaseLocomotive ____locomotive,
+            Graph ____graph,
+            Dictionary<string, bool> ____routeSwitchesToRestore
+        )
+        {
+            try
+            {
+                if (____routeSwitchesToRestore != null && ____routeSwitchesToRestore.Count > 0)
+                    KeepUnrestored(__instance, ____locomotive, ____graph, new Dictionary<string, bool>(____routeSwitchesToRestore), "when its route was cleared");
+            }
+            catch (Exception ex)
+            {
+                Loader.LogError($"PatchRestoreSwitchesAfterWaypoint ClearRoute prefix failed: {ex}");
+            }
+        }
+
+        // The switches in the list still away from where the AE found them go to the restorer.
+        private static void KeepUnrestored(AutoEngineerPlanner planner, BaseLocomotive locomotive, Graph graph, Dictionary<string, bool> switches, string why)
+        {
+            if (switches == null || locomotive == null || graph == null)
+                return;
+
+            foreach (KeyValuePair<string, bool> entry in switches)
+            {
+                TrackNode node = graph.GetNode(entry.Key);
+                if (node == null || node.isThrown == entry.Value)
+                    continue;
+
+                PendingSwitchRestorer.Add(new PendingSwitchRestorer.PendingSwitch
+                {
+                    NodeId = entry.Key,
+                    OriginalThrown = entry.Value,
+                    LeftThrown = node.isThrown,
+                    Planner = new WeakReference<AutoEngineerPlanner>(planner),
+                    Locomotive = new WeakReference<BaseLocomotive>(locomotive),
+                    LocomotiveIdent = locomotive.Ident.ToString(),
+                    Position = node.transform.position.WorldToGame(),
+                    AddedAt = Time.unscaledTime
+                });
+                Loader.LogDebug($"Loco {locomotive.Ident} couldn't reset switch {entry.Key} {why}; will reset it once the train is clear");
             }
         }
     }
