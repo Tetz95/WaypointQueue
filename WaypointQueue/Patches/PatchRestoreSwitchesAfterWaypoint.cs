@@ -21,7 +21,9 @@ namespace WaypointQueue
     //
     // ClearRoute forgets them too, without resetting any. It runs as soon as the waypoint is cleared (the planner
     // handles order changes at once), so cancelling a waypoint and sending the next one straight away, as the queue
-    // does, left every switch the old route had thrown and not yet reset. Those go to the same restorer.
+    // does, left every switch the old route had thrown and not yet reset. Those go to the same restorer, but only
+    // while the AE stays in waypoint mode: a player who switches it to Road, Yard or Off takes the train on from
+    // there, and the switches lined ahead of it stay as they are.
     [HarmonyPatch(typeof(AutoEngineerPlanner))]
     internal class PatchRestoreSwitchesAfterWaypoint
     {
@@ -63,12 +65,13 @@ namespace WaypointQueue
             AutoEngineerPlanner __instance,
             BaseLocomotive ____locomotive,
             Graph ____graph,
-            Dictionary<string, bool> ____routeSwitchesToRestore
+            Dictionary<string, bool> ____routeSwitchesToRestore,
+            Orders ____orders
         )
         {
             try
             {
-                if (____routeSwitchesToRestore != null && ____routeSwitchesToRestore.Count > 0)
+                if (____orders.Mode == Game.Messages.AutoEngineerMode.Waypoint && ____routeSwitchesToRestore != null && ____routeSwitchesToRestore.Count > 0)
                     KeepUnrestored(__instance, ____locomotive, ____graph, new Dictionary<string, bool>(____routeSwitchesToRestore), "when its route was cleared");
             }
             catch (Exception ex)
