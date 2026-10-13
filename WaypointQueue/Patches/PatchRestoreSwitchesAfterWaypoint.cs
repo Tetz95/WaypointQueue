@@ -80,6 +80,36 @@ namespace WaypointQueue
             }
         }
 
+        // The AE records where a switch was when it first throws it, as the position to put it back to. A switch an
+        // earlier route left thrown, still waiting in the restorer, isn't where it belongs, so recording it there made
+        // the new route put it back the wrong way: the restorer saw the switch "back" and dropped it, and from then on
+        // the thrown position was the one restored (a switch left reversed for good). A route that throws a switch the
+        // restorer is holding takes it over with the restorer's position.
+        [HarmonyPrefix]
+        [HarmonyPatch("TrySetSwitch")]
+        private static void TrySetSwitchPrefix(TrackNode node, Dictionary<string, bool> ____routeSwitchesToRestore, out bool __state)
+        {
+            __state = node != null && ____routeSwitchesToRestore != null && !____routeSwitchesToRestore.ContainsKey(node.id);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch("TrySetSwitch")]
+        private static void TrySetSwitchPostfix(TrackNode node, Dictionary<string, bool> ____routeSwitchesToRestore, BaseLocomotive ____locomotive, bool __state)
+        {
+            try
+            {
+                if (__state && ____routeSwitchesToRestore.ContainsKey(node.id) && PendingSwitchRestorer.TryTake(node.id, out bool originalThrown))
+                {
+                    ____routeSwitchesToRestore[node.id] = originalThrown;
+                    Loader.LogDebug($"Loco {____locomotive?.Ident}: route takes over switch {node.id} from the restorer; it goes back to {(originalThrown ? "reverse" : "normal")}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Loader.LogError($"PatchRestoreSwitchesAfterWaypoint TrySetSwitch postfix failed: {ex}");
+            }
+        }
+
         // The switches in the list still away from where the AE found them go to the restorer.
         private static void KeepUnrestored(AutoEngineerPlanner planner, BaseLocomotive locomotive, Graph graph, Dictionary<string, bool> switches, string why)
         {
@@ -156,6 +186,18 @@ namespace WaypointQueue
                 DontDestroyOnLoad(go);
                 _instance = go.AddComponent<PendingSwitchRestorer>();
             }
+        }
+
+        // Hands a waiting switch over to a route that is throwing it: the position to put it back to. It's no longer
+        // retried here.
+        internal static bool TryTake(string nodeId, out bool originalThrown)
+        {
+            originalThrown = false;
+            if (!_pending.TryGetValue(nodeId, out PendingSwitch pending))
+                return false;
+            _pending.Remove(nodeId);
+            originalThrown = pending.OriginalThrown;
+            return true;
         }
 
         // Called when the mod unloads, so nothing is thrown after the patches are removed.
