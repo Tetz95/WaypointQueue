@@ -71,6 +71,7 @@ namespace WaypointQueue
         [Draw("Kick button unchecks bleeding air and applying handbrakes on uncouple")] public bool UncheckAirAndBrakesForKick = true;
         [Draw("Do not automatically set passing speed limit when not stopping at waypoint")] public bool DoNotLimitPassingSpeedDefault = true;
         [Draw("Prevent tenders being uncoupled from locomotive")] public bool PreventTenderUncoupling = true;
+        [Draw("Turn back clear of CTC interlockings", Tooltip = "Under CTC, a route that reverses beyond an interlocking's switch runs the whole train out of the plant before reversing,\nso the dispatcher can line the switch for the reverse move. Otherwise the train turns back with its rear in the plant and waits there.")] public bool ReverseClearOfInterlockings = true;
 
         [Draw("Advanced settings", Collapsible = true)] public AdvancedSettings AdvancedSettings = new AdvancedSettings();
 
