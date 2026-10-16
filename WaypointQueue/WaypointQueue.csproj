@@ -48,6 +48,16 @@
   <!-- Install into the game's Mods folder. Settings.xml there is left alone. -->
   <Target Name="InstallMod" AfterTargets="Build" Condition="Exists('..\Paths.user')">
     <MakeDir Directories="$(ModDirectory)" />
+    <!-- Delete before copying: Vortex deploys hardlinks, and copying over one would also change Vortex's own copy. -->
+    <ItemGroup>
+      <_InstallFiles Remove="@(_InstallFiles)" />
+      <_InstallFiles Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;..\Info.json" />
+    </ItemGroup>
+    <ItemGroup>
+      <_InstallTargets Remove="@(_InstallTargets)" />
+      <_InstallTargets Include="$(ModDirectory)\\%(_InstallFiles.Filename)%(_InstallFiles.Extension)" />
+    </ItemGroup>
+    <Delete Files="@(_InstallTargets)" />
     <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;..\Info.json" DestinationFolder="$(ModDirectory)" />
   </Target>
 </Project>
