@@ -248,8 +248,14 @@ namespace WaypointQueue
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(AutoEngineerPlanner), "SendMessageToRouteRequester")]
-        static bool SendMessageToRouteRequesterPrefix(AutoEngineerPlanner __instance)
+        static bool SendMessageToRouteRequesterPrefix(AutoEngineerPlanner __instance, Network.Messages.AlertLevel alertLevel)
         {
+            // A periodic reroute stays quiet about the route it set, but not about a waypoint it can't reach: otherwise
+            // "Unable to find a path to waypoint" never reached the player (a turntable not lined to a stall, say).
+            if (alertLevel == Network.Messages.AlertLevel.Error)
+            {
+                return true;
+            }
             BaseLocomotive loco = Traverse.Create(__instance).Field("_locomotive").GetValue<BaseLocomotive>();
             if (Shared._timeSinceLastRerouteByLocoId.TryGetValue(loco.id, out float elapsed) && elapsed == 0)
             {

@@ -85,10 +85,13 @@ namespace WaypointQueue
                     {
                         (Location closestTrainEnd, Location _) = carService.GetTrainEndLocations(waypointState.UnresolvedWaypoint.Locomotive, waypointState.UnresolvedWaypoint.Location, out float closestDistance, out var _, out var _, out _, out _);
 
-                        GraphRouteSearchExtension.TryFindDistance(Graph.Shared, closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance, out float traverseTimeSeconds);
+                        // No route (a turntable not lined to the waypoint's stall, say): the search reports 0 m, which
+                        // matched the planner's "At waypoint" 0 m and turned its stop into running at track speed, so
+                        // the train drove off in whatever direction it faced and kept going. Only a found route counts.
+                        bool routeFound = GraphRouteSearchExtension.TryFindDistance(Graph.Shared, closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance, out float traverseTimeSeconds);
 
                         Targets.Target t = updatedTargets[indexOfWaypoint];
-                        if (Mathf.Abs(totalDistance - t.Distance) < 10f)
+                        if (routeFound && Mathf.Abs(totalDistance - t.Distance) < 10f)
                         {
                             //Loader.LogDebug($"Updating AE target {signedSpeedToSet}mph @ {t.Distance} for reason {t.Reason}");
                             updatedTargets[indexOfWaypoint] = new Targets.Target(signedSpeedToSet, t.Distance, t.Reason);
