@@ -21,7 +21,10 @@ namespace WaypointQueue
     // The game rebuilds the route each time the train enters a CTC switch, and charges the rebuilt route heavily for
     // reversing on the spot (momentumRerouteAtCtcSwitch); by then the switch to turn back beyond is no longer under the
     // train, so a plant with a second switch on the way out (Ela West, from the distillery) got a turn-back far beyond
-    // the next signal. That rebuild is skipped while the route still turns back ahead beyond a switch moved on here.
+    // the next signal. That rebuild is skipped while the route still turns back ahead beyond a switch moved on here, as
+    // long as the turn-back is still needed: a dry run of the game's search from where the train is now must still turn
+    // back. When it doesn't (a stale turn-back), the game rebuilds as usual; skipping it then kept a route that ran past
+    // the switch and backed up into a red signal (Tetz's AE Routing Fixes 1.4.1, 2026-10-20).
     [HarmonyPatch]
     internal static class PatchReverseClearOfInterlocking
     {
@@ -75,7 +78,11 @@ namespace WaypointQueue
         {
             private static MethodBase TargetMethod() => AccessTools.Method(typeof(AutoEngineerPlanner), "UpdateWaypointRouteIfNeeded");
 
-            private static bool Prefix(bool force, float baseMomentum, List<RouteSearch.Step> ____route, int ____startStepIndex, BaseLocomotive ____locomotive)
+            private static readonly MethodInfo RouteStartLocation = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation");
+            private static readonly AccessTools.FieldRef<AutoEngineerPlanner, global::Model.AI.Orders> OrdersRef = AccessTools.FieldRefAccess<AutoEngineerPlanner, global::Model.AI.Orders>("_orders");
+            private static readonly AccessTools.FieldRef<AutoEngineerPlanner, float> MaximumLength = AccessTools.FieldRefAccess<AutoEngineerPlanner, float>("_maximumLength");
+
+            private static bool Prefix(AutoEngineerPlanner __instance, bool force, float baseMomentum, List<RouteSearch.Step> ____route, int ____startStepIndex, BaseLocomotive ____locomotive)
             {
                 // Only the rebuild on entering a CTC switch carries momentum.
                 if (!force || baseMomentum <= 0f || !Loader.Settings.ReverseClearOfInterlockings || ____route == null)
@@ -85,11 +92,46 @@ namespace WaypointQueue
                     RouteSearch.Step step = ____route[i];
                     if (step.Direction != ____route[i - 1].Direction && step.Node != null && _extended.Contains(step.Node.id))
                     {
+                        if (!StillTurnsBack(__instance, baseMomentum))
+                        {
+                            Loader.LogDebug($"{____locomotive?.Ident}: the route no longer needs to turn back beyond {step.Node.id}; rebuilding it");
+                            return true;
+                        }
                         Loader.LogDebug($"{____locomotive?.Ident}: keeping the route through the CTC switch; it turns back beyond {step.Node.id}, clear of the interlocking");
                         return false;
                     }
                 }
                 return true;
+            }
+
+            // The game's own search (as RebuildRoute runs it first), from where the train is now: does the best route still
+            // turn back anywhere? When in doubt, yes (keep the route).
+            private static bool StillTurnsBack(AutoEngineerPlanner planner, float baseMomentum)
+            {
+                try
+                {
+                    OrderWaypoint? waypoint = OrdersRef(planner).Waypoint;
+                    if (!waypoint.HasValue)
+                        return true;
+                    Graph graph = Graph.Shared;
+                    Location end = graph.ResolveLocationString(waypoint.Value.LocationString);
+                    object[] args = { 0f };
+                    Location start = (Location)RouteStartLocation.Invoke(planner, args);
+                    float momentum = (float)args[0] + baseMomentum;
+                    var steps = new List<RouteSearch.Step>();
+                    if (!graph.FindRoute(start, end, HeuristicCosts.AutoEngineer, steps, out _, checkForCars: false, MaximumLength(planner), momentum))
+                        return true;
+                    for (int i = 1; i < steps.Count; i++)
+                    {
+                        if (steps[i].Direction != steps[i - 1].Direction)
+                            return true;
+                    }
+                    return false;
+                }
+                catch (Exception)
+                {
+                    return true;
+                }
             }
         }
 
