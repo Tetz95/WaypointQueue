@@ -572,9 +572,16 @@ namespace WaypointQueue
             {
                 return false;
             }
+            // Only on the last leg: with a turn-back still ahead (a train reversing out before it heads for the
+            // waypoint) the train's far end can be on the wrong side, and "past" came out the wrong way.
+            if (!TryGetLastLegApproach(wp, out Vector3 approachFrom))
+            {
+                return false;
+            }
+            Loader.Log($"{wp.Locomotive.Ident} is on its last approach to the waypoint ({closestDistance:F0} m); sending it past now");
             try
             {
-                return OrderClearBeyondWaypoint(wp, ordersHelper);
+                return OrderClearBeyondWaypoint(wp, ordersHelper, approachFrom);
             }
             catch (WaypointProcessingException e)
             {
@@ -583,7 +590,54 @@ namespace WaypointQueue
             }
         }
 
-        private bool OrderClearBeyondWaypoint(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper)
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, List<Track.Search.RouteSearch.Step>> PlannerRoute =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, List<Track.Search.RouteSearch.Step>>("_route");
+
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, int> PlannerStartStep =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, int>("_startStepIndex");
+
+        // False while the auto engineer's route to the waypoint still turns back. Otherwise the point the train comes
+        // from on its last approach (the route's last step before the waypoint, or the train's end nearest the
+        // waypoint), which sets which way is past the waypoint.
+        private bool TryGetLastLegApproach(ManagedWaypoint wp, out Vector3 approachFrom)
+        {
+            approachFrom = default;
+            AutoEngineerPlanner planner = (wp.Locomotive as BaseLocomotive)?.AutoEngineerPlanner;
+            List<Track.Search.RouteSearch.Step> route = planner == null ? null : PlannerRoute(planner);
+            if (route == null || route.Count == 0)
+            {
+                return false;
+            }
+            // The route to this waypoint, not the one before it: the game finds a new route a moment after the waypoint
+            // is sent, and until then still holds the old one.
+            Vector3 waypointAt = Graph.Shared.GetPosition(wp.Location);
+            if (Vector3.Distance(route[route.Count - 1].Position, waypointAt) > 2f)
+            {
+                return false;
+            }
+            int start = Math.Max(0, PlannerStartStep(planner));
+            for (int i = start + 1; i < route.Count; i++)
+            {
+                if (route[i].Direction != route[i - 1].Direction)
+                {
+                    return false;
+                }
+            }
+            for (int i = route.Count - 2; i >= start; i--)
+            {
+                Vector3 position = route[i].Position;
+                if (Vector3.Distance(position, waypointAt) > 2f)
+                {
+                    approachFrom = position;
+                    return true;
+                }
+            }
+            (Location closest, _) = carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out _, out _, out _, out _, out _);
+            approachFrom = Graph.Shared.GetPosition(closest);
+            return Vector3.Distance(approachFrom, waypointAt) > 2f;
+        }
+
+        private bool OrderClearBeyondWaypoint(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper, Vector3? approachFrom = null)
         {
             waypoint.StopAtWaypoint = true;
             waypoint.MoveTrainPastWaypoint = false;
@@ -593,7 +647,11 @@ namespace WaypointQueue
 
             float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
 
-            Location orientedLocation = Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
+            // Past the waypoint is away from where the train comes from: its far end on arrival, or (ordered on the
+            // approach) the route's point before the waypoint, so where the train stands on the way in doesn't matter.
+            Location orientedLocation = approachFrom.HasValue
+                ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
+                : Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
             Location locationToMove;
 
             try
@@ -614,6 +672,14 @@ namespace WaypointQueue
             Loader.Log($"Sending train of {waypoint.Locomotive.Ident} to {locationToMove} past the waypoint");
             autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
             return true;
+        }
+
+        private static Location OrientedAwayFrom(Location location, Vector3 point)
+        {
+            Graph graph = Graph.Shared;
+            Vector3 ahead = graph.GetPosition(graph.LocationByMoving(location, 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            Vector3 behind = graph.GetPosition(graph.LocationByMoving(location.Flipped(), 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            return Vector3.Distance(ahead, point) >= Vector3.Distance(behind, point) ? location : location.Flipped();
         }
 
         private float GetTrainLength(BaseLocomotive locomotive)

@@ -525,7 +525,14 @@ namespace WaypointQueue
 
             state.Waypoints[index] = waypoint;
 
-            state.UnresolvedWaypoint = state.Waypoints.FirstOrDefault();
+            // The unresolved waypoint is the one already sent to the train. Changing a waypoint that hasn't been sent
+            // yet (its options set before the auto engineer was put in waypoint mode, say) marked it as sent: the next
+            // tick found no waypoint order, took the train to have arrived, and resolved it where the train stood (a
+            // "send past waypoint" then went the wrong way). Only the sent waypoint's own copy is refreshed.
+            if (state.UnresolvedWaypoint != null && state.UnresolvedWaypoint.Id == waypoint.Id)
+            {
+                state.UnresolvedWaypoint = waypoint;
+            }
 
             Loader.LogDebug($"Saving loco queue state after updating waypoint {waypoint.Id} for loco id: {waypoint.LocomotiveId}");
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
