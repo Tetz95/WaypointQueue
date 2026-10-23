@@ -149,6 +149,13 @@ namespace WaypointQueue
                     }
                 }
 
+                // Send past waypoint without stopping: switch to the clear point while still approaching
+                if (entry.UnresolvedWaypoint != null && _autoEngineerService.HasActiveWaypoint(ordersHelper)
+                    && _waypointResolver.TryOrderClearBeyondEarly(entry.UnresolvedWaypoint, ordersHelper))
+                {
+                    continue;
+                }
+
                 if (!IsReadyToResolve(entry, ordersHelper))
                 {
                     continue;

@@ -556,6 +556,33 @@ namespace WaypointQueue
             return false;
         }
 
+        // Send past waypoint without stopping: once the train is this close, it is sent on to the point that clears the
+        // waypoint. Ordered only on arrival, the game's own stop at the waypoint and a stop within one train length
+        // braked the train almost to a stand short of the waypoint before it crept on to the clear point.
+        internal const float ClearBeyondLeadDistance = 400f;
+
+        internal bool TryOrderClearBeyondEarly(ManagedWaypoint wp, AutoEngineerOrdersHelper ordersHelper)
+        {
+            if (wp.StopAtWaypoint || !wp.MoveTrainPastWaypoint || wp.HasAnyCouplingOrders || wp.WaitingWasSkipped)
+            {
+                return false;
+            }
+            carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out float closestDistance, out _, out _, out _, out _);
+            if (closestDistance > ClearBeyondLeadDistance)
+            {
+                return false;
+            }
+            try
+            {
+                return OrderClearBeyondWaypoint(wp, ordersHelper);
+            }
+            catch (WaypointProcessingException e)
+            {
+                HandleProcessingError("Move past waypoint", e, wp);
+                return false;
+            }
+        }
+
         private bool OrderClearBeyondWaypoint(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper)
         {
             waypoint.StopAtWaypoint = true;
