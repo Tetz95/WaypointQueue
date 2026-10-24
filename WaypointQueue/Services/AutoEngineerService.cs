@@ -14,8 +14,29 @@ namespace WaypointQueue.Services
     {
         public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null)
         {
-            (Location, string)? maybeWaypoint = (location.Clamped(), coupleToCarId);
+            (Location, string)? maybeWaypoint = (InsideSegment(location), coupleToCarId);
             ordersHelper.SetOrdersValue(null, null, null, null, maybeWaypoint);
+        }
+
+        // The order keeps its waypoint as text with the distance rounded to 1 mm, so a waypoint on the very end of a
+        // segment could round past it (47.088 on a 47.08782 m segment): the game then failed to route there on every
+        // try and the train never set off. A centimetre inside the segment survives the rounding.
+        private const float SegmentEndMargin = 0.01f;
+
+        internal static Location InsideSegment(Location location)
+        {
+            Location clamped = location.Clamped();
+            if (clamped.segment == null)
+            {
+                return clamped;
+            }
+            float length = clamped.segment.GetLength();
+            if (length <= 2f * SegmentEndMargin)
+            {
+                return clamped;
+            }
+            float distance = Math.Min(Math.Max(clamped.distance, SegmentEndMargin), length - SegmentEndMargin);
+            return new Location(clamped.segment, distance, clamped.end);
         }
 
         public void SendToWaypoint(BaseLocomotive loco, Location location, string coupleToCarId = null)
