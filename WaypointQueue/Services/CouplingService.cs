@@ -74,7 +74,7 @@ namespace WaypointQueue.Services
                 wp.OverwriteLocation(bestLocation);
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
                 Loader.Log($"Sending target coupling waypoint for {wp.Locomotive.Ident} to {bestLocation} with coupling to {targetCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, bestLocation, targetCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, bestLocation, targetCar, nearestEnd);
                 return true;
             }
 
@@ -92,6 +92,7 @@ namespace WaypointQueue.Services
 
             Car bestMatchCar = null;
             Location bestMatchLocation = default;
+            LogicalEnd bestMatchEnd = default;
             float bestMatchDistance = 100000;
 
             foreach (var carId in nearbyCarIds)
@@ -108,6 +109,7 @@ namespace WaypointQueue.Services
                     if (totalDistance < bestMatchDistance)
                     {
                         bestMatchCar = car;
+                        bestMatchEnd = nearestEnd;
                         bestMatchLocation = car.LocationFor(nearestEnd);
                         bestMatchDistance = totalDistance;
                     }
@@ -128,7 +130,7 @@ namespace WaypointQueue.Services
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
 
                 Loader.Log($"Sending nearby coupling waypoint for {wp.Locomotive.Ident} to {adjustedLocation} with coupling to {bestMatchCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, adjustedLocation, bestMatchCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, adjustedLocation, bestMatchCar, bestMatchEnd);
                 return true;
             }
 
@@ -146,6 +148,7 @@ namespace WaypointQueue.Services
             LogicalEnd nearestEnd = carService.ClosestLogicalEndTo(targetCar, waypoint.Locomotive.OpsLocation);
 
             Location bestLocation;
+            LogicalEnd coupleEnd = nearestEnd;
 
             if (!targetCar[nearestEnd].IsCoupled)
             {
@@ -155,7 +158,8 @@ namespace WaypointQueue.Services
             else if (!targetCar[carService.GetOppositeEnd(nearestEnd)].IsCoupled)
             {
                 Loader.Log($"Furthest end of {targetCar.Ident} is available to couple");
-                bestLocation = GetCouplerLocation(targetCar, carService.GetOppositeEnd(nearestEnd));
+                coupleEnd = carService.GetOppositeEnd(nearestEnd);
+                bestLocation = GetCouplerLocation(targetCar, coupleEnd);
             }
             else
             {
@@ -174,7 +178,7 @@ namespace WaypointQueue.Services
                 waypoint.OverwriteLocation(bestLocation);
                 WaypointQueueController.Shared.UpdateWaypoint(waypoint);
                 Loader.Log($"Sending target coupling waypoint for {waypoint.Locomotive.Ident} to {bestLocation} with coupling to {targetCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, bestLocation, targetCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, bestLocation, targetCar, coupleEnd);
                 return true;
             }
 

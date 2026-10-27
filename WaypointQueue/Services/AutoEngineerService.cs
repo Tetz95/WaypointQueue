@@ -49,6 +49,20 @@ namespace WaypointQueue.Services
             return new Location(clamped.segment, distance, clamped.end);
         }
 
+        // Sends the locomotive to couple to one end of a car. 2026.1 plans it as the game's own coupling order (the
+        // train placed against that coupler, and a coupling by the wrong ends caught on arrival); Legacy sends the
+        // coupler's location.
+        public void SendToCouple(AutoEngineerOrdersHelper ordersHelper, Location couplerLocation, Car car, Car.LogicalEnd end)
+        {
+#if RR2026
+            var locomotive = (BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value;
+            OrderWaypoint? waypoint = global::Model.AI.Waypoints.PosedWaypoint.CoupleOrder(locomotive, Graph.Shared.Current, car, car.LogicalToEnd(end), WaypointEnd.Nearest);
+            ordersHelper.SetOrdersValue(null, null, null, null, waypoint);
+#else
+            SendToWaypoint(ordersHelper, couplerLocation, car.id);
+#endif
+        }
+
         public void SendToWaypoint(BaseLocomotive loco, Location location, string coupleToCarId = null)
         {
             var ordersHelper = GetOrdersHelper(loco);
