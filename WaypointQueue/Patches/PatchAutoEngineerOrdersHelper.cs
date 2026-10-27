@@ -17,7 +17,6 @@ namespace WaypointQueue
     [HarmonyPatch(typeof(AutoEngineerOrdersHelper))]
     internal class PatchAutoEngineerOrdersHelper
     {
-#if RR2026
         // 2026.1: the picker hands over a whole OrderWaypoint, through SetWaypoint in waypoint mode or SetWaypointOrder
         // (which also switches the engineer to waypoint mode). The queue keeps its location and the car to couple to;
         // the pose the picker chose (arriving end, facing, turns) isn't kept yet.
@@ -59,13 +58,6 @@ namespace WaypointQueue
         static bool SetWaypointPrefix(Location location, string coupleToCarId, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
         {
             QueuedPose pose = _pickedPose;
-#else
-        [HarmonyPrefix]
-        [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypoint))]
-        static bool SetWaypointPrefix(Location location, string coupleToCarId, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
-        {
-            QueuedPose pose = null;
-#endif
             //Loader.LogDebug($"SetWaypoint prefix");
 
             OrderWaypoint? existingWaypoint = ____persistence.Orders.Waypoint;

@@ -122,7 +122,6 @@ namespace WaypointQueue
         private const float HighSpeedMphThreshold = 35f;
         private const float HighSpeedWaypointRadiusMeters = 25f;
 
-#if RR2026
         [HarmonyPostfix]
         [HarmonyPatch("CheckWaypointArrival")]
         private static void CheckWaypointArrivalPostfix(
@@ -147,18 +146,6 @@ namespace WaypointQueue
             Graph ____graph,
             ref Location? ____routeTargetLocation
         )
-#else
-        [HarmonyPostfix]
-        [HarmonyPatch("IsWaypointSatisfied")]
-        private static void IsWaypointSatisfiedPostfix(
-            AutoEngineerPlanner __instance,
-            OrderWaypoint waypoint,
-            ref bool __result,
-            BaseLocomotive ____locomotive,
-            Graph ____graph,
-            ref Location? ____routeTargetLocation
-        )
-#endif
         {
             try
             {

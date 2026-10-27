@@ -15,16 +15,12 @@ namespace WaypointQueue.Services
     {
         public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null, QueuedPose pose = null)
         {
-#if RR2026
             // 2026.1 waypoint orders carry the location as a string, and the pose the player picked, if any.
             Location mark = InsideSegment(location);
             string locationString = GraphCompat.LocationToString(mark);
             OrderWaypoint? maybeWaypoint = pose != null && !pose.IsEmpty
                 ? pose.ToOrder((BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value, mark, locationString, coupleToCarId)
                 : new OrderWaypoint(locationString, coupleToCarId);
-#else
-            (Location, string)? maybeWaypoint = (InsideSegment(location), coupleToCarId);
-#endif
             ordersHelper.SetOrdersValue(null, null, null, null, maybeWaypoint);
         }
 
@@ -54,13 +50,9 @@ namespace WaypointQueue.Services
         // coupler's location.
         public void SendToCouple(AutoEngineerOrdersHelper ordersHelper, Location couplerLocation, Car car, Car.LogicalEnd end)
         {
-#if RR2026
             var locomotive = (BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value;
             OrderWaypoint? waypoint = global::Model.AI.Waypoints.PosedWaypoint.CoupleOrder(locomotive, Graph.Shared.Current, car, car.LogicalToEnd(end), WaypointEnd.Nearest);
             ordersHelper.SetOrdersValue(null, null, null, null, waypoint);
-#else
-            SendToWaypoint(ordersHelper, couplerLocation, car.id);
-#endif
         }
 
         public void SendToWaypoint(BaseLocomotive loco, Location location, string coupleToCarId = null)

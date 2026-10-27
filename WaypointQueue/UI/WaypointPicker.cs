@@ -111,12 +111,10 @@ namespace WaypointQueue.UI
                 StopCoroutine(_coroutine);
             }
 
-#if RR2026
             if (UseGamePicker(forRoute ? TrainController.Shared.SelectedLocomotive : waypoint.Locomotive))
             {
                 return;
             }
-#endif
             _coroutine = StartCoroutine(Loop());
 
             string message = "Click to move waypoint for route";
@@ -156,12 +154,10 @@ namespace WaypointQueue.UI
                 StopCoroutine(_coroutine);
             }
 
-#if RR2026
             if (UseGamePicker(forRoute ? TrainController.Shared.SelectedLocomotive : beforeWaypoint.Locomotive))
             {
                 return;
             }
-#endif
             _coroutine = StartCoroutine(Loop());
 
             string message = "Click to insert a waypoint for route";
@@ -189,12 +185,10 @@ namespace WaypointQueue.UI
             _routeId = routeId;
             _cancelMessage = "Cancelled adding waypoint";
             _dontSnapToCars = [];
-#if RR2026
             if (UseGamePicker(TrainController.Shared.SelectedLocomotive))
             {
                 return;
             }
-#endif
 
             _coroutine = StartCoroutine(Loop());
 
@@ -203,7 +197,6 @@ namespace WaypointQueue.UI
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
         }
 
-#if RR2026
         // Picks with the game's picker, so the pose can be chosen. Route waypoints need a selected locomotive to size
         // the train's footprint; without one the plain picker below is used.
         private bool UseGamePicker(BaseLocomotive locomotive)
@@ -224,7 +217,6 @@ namespace WaypointQueue.UI
             });
         }
 
-#endif
         private void ShowMessage(string message)
         {
             Toast.Present(message, ToastPosition.Bottom);

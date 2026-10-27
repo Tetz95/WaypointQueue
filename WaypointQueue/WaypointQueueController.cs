@@ -543,14 +543,11 @@ namespace WaypointQueue
         public void ResumeWaypoint(ManagedWaypoint waypoint)
         {
             Loader.Log($"Resuming the waypoint for {waypoint.Locomotive.Ident} after {waypoint.Errors.Count} error(s)");
-#if RR2026
             // The train stopped short of the waypoint (wrong track or coupling ends): send it there again.
             bool resend = waypoint.Errors.Any(e => e.ErrorType == PatchWaypointMismatch.ErrorType);
-#endif
             waypoint.Errors = [];
             waypoint.StatusLabel = "Running to waypoint";
             UpdateWaypoint(waypoint);
-#if RR2026
             if (resend)
             {
                 LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId);
@@ -559,7 +556,6 @@ namespace WaypointQueue
                     SendToFirstWaypoint(state);
                 }
             }
-#endif
         }
 
         public void ReorderWaypoint(ManagedWaypoint waypoint, int newIndex)
@@ -644,7 +640,6 @@ namespace WaypointQueue
             }
 
             QueuedPose pose = waypoint.Pose;
-#if RR2026
             // 2026.1 places the train past the waypoint itself (the "train past it" pose), so the move past isn't a
             // second order after arriving. A pose the player picked already says where the train stands.
             if (!waypoint.StopAtWaypoint && waypoint.MoveTrainPastWaypoint && !waypoint.HasAnyCouplingOrders)
@@ -657,7 +652,6 @@ namespace WaypointQueue
                 waypoint.StopAtWaypoint = true;
                 waypoint.MoveTrainPastWaypoint = false;
             }
-#endif
             Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
             _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
 

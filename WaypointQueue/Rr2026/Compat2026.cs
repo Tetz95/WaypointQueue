@@ -1,4 +1,3 @@
-#if RR2026
 // Members Railroader 2026.1 renamed or dropped, added back as C# 14 extension members so the code that uses them reads
 // as it does for Legacy.
 using System.Collections.Generic;
@@ -67,4 +66,3 @@ namespace WaypointQueue
         }
     }
 }
-#endif

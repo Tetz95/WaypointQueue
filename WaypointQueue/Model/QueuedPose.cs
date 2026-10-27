@@ -2,14 +2,12 @@ using KeyValue.Runtime;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Linq;
-#if RR2026
 using Model;
 using Model.AI;
 using Model.AI.Waypoints;
 using Track;
 using Track.Search;
 using UnityEngine;
-#endif
 
 namespace WaypointQueue.Model
 {
@@ -81,7 +79,6 @@ namespace WaypointQueue.Model
             return pose.IsEmpty ? null : pose;
         }
 
-#if RR2026
         public static QueuedPose From(OrderWaypoint waypoint)
         {
             var pose = new QueuedPose
@@ -182,6 +179,5 @@ namespace WaypointQueue.Model
             }
             return PosedWaypoint.Order(locomotive, Graph.Shared.Current, mark, end, side, null, coupleToCarId, carEnd);
         }
-#endif
     }
 }

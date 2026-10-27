@@ -1,4 +1,3 @@
-#if RR2026
 // Railroader 2026.1 dropped car archetypes for AAR car types (CarType: "LS..." steam, "LD..." diesel, "LT..." tender).
 // The archetypes this mod checks are derived from the car type, so the checks read as before.
 namespace Model
@@ -26,4 +25,3 @@ namespace Model
             archetype == CarArchetype.LocomotiveSteam || archetype == CarArchetype.LocomotiveDiesel;
     }
 }
-#endif

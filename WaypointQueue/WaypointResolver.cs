@@ -560,20 +560,16 @@ namespace WaypointQueue
         // waypoint. Ordered only on arrival, the game's own stop at the waypoint and a stop within one train length
         // braked the train almost to a stand short of the waypoint before it crept on to the clear point.
         internal const float ClearBeyondLeadDistance = 400f;
-#if RR2026
 
         private static readonly bool NativeSendPast = true;
-#endif
 
         internal bool TryOrderClearBeyondEarly(ManagedWaypoint wp, AutoEngineerOrdersHelper ordersHelper)
         {
-#if RR2026
             // 2026.1 sends the train past with a pose when the waypoint is sent (WaypointQueueController).
             if (NativeSendPast)
             {
                 return false;
             }
-#endif
             if (wp.StopAtWaypoint || !wp.MoveTrainPastWaypoint || wp.HasAnyCouplingOrders || wp.WaitingWasSkipped)
             {
                 return false;
@@ -767,14 +763,8 @@ namespace WaypointQueue
 
         private float GetTrainLength(BaseLocomotive locomotive)
         {
-#if RR2026
             // 2026.1: a public static over the given cars.
             return AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
-#else
-            MethodInfo calculateTotalLengthMI = AccessTools.Method(typeof(AutoEngineerPlanner), "CalculateTotalLength");
-            float totalTrainLength = (float)calculateTotalLengthMI.Invoke(locomotive.AutoEngineerPlanner, []);
-            return totalTrainLength;
-#endif
         }
 
         private void ResolveBrakeSystemOnCouple(ManagedWaypoint waypoint)

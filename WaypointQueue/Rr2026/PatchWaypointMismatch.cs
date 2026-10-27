@@ -1,4 +1,3 @@
-#if RR2026
 using System;
 using HarmonyLib;
 using Model;
@@ -37,4 +36,3 @@ namespace WaypointQueue
         }
     }
 }
-#endif

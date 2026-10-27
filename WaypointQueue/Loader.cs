@@ -12,7 +12,6 @@ using WaypointQueue.Wrappers;
 
 namespace WaypointQueue.UUM
 {
-#if RR2026
     public sealed class ModEntryPoint : Railroader.Modding.IModEntryPoint
     {
         public void OnModLoad(Railroader.Modding.IModContext context) => Loader.Start(context);
@@ -22,7 +21,6 @@ namespace WaypointQueue.UUM
         }
     }
 
-#endif
     public static class Loader
     {
         public static UnityModManager.ModEntry ModEntry { get; private set; }
@@ -42,7 +40,6 @@ namespace WaypointQueue.UUM
 
         public static GameObject RouteStorageGO { get; private set; }
 
-#if RR2026
         // Railroader 2026.1 loads the mod through ModEntryPoint below; a UMM-style mod entry (Rr2026/UmmShim.cs) keeps
         // the rest of the loader as it is, and LoaderUpdater calls OnUpdate every frame as UMM did.
         internal static void Start(Railroader.Modding.IModContext context)
@@ -64,7 +61,6 @@ namespace WaypointQueue.UUM
             private void Update() => ModEntry?.OnUpdate?.Invoke(ModEntry, Time.deltaTime);
         }
 
-#endif
         private static bool Load(UnityModManager.ModEntry modEntry)
         {
             if (ModEntry != null)
@@ -206,9 +202,6 @@ namespace WaypointQueue.UUM
 
         private static void OnGUI(UnityModManager.ModEntry modEntry)
         {
-#if !RR2026
-            Settings.Draw(modEntry);
-#endif
         }
 
         private static void OnSaveGUI(UnityModManager.ModEntry modEntry)
@@ -230,11 +223,9 @@ namespace WaypointQueue.UUM
 
             WindowHelper.CreateWindow<RouteManagerWindow>(null);
             RouteManagerWindow = RouteManagerWindow.Shared;
-#if RR2026
 
             // No UMM settings page in 2026.1: the Waypoints window has a Settings button instead.
             WindowHelper.CreateWindow<SettingsWindow>(null);
-#endif
         }
 
         public static void Log(string str)

@@ -223,14 +223,12 @@ namespace WaypointQueue.UI
             panelsByWaypointId.Clear();
 
             builder.Spacing = 12f;
-#if RR2026
 
             builder.HStack(row =>
             {
                 row.Spacer();
                 row.AddButtonCompact("Settings", () => SettingsWindow.Shared?.Toggle());
             });
-#endif
 
             builder.VScrollView(delegate (UIPanelBuilder builder)
             {
@@ -404,10 +402,8 @@ namespace WaypointQueue.UI
 
                     BuildSendPastWaypointField(waypoint, row, onWaypointChange);
                 });
-#if RR2026
 
                 BuildPoseField(waypoint, builder, isRouteWindow);
-#endif
 
                 if (!waypoint.StopAtWaypoint && !waypoint.IsCoupling)
                 {
@@ -898,7 +894,6 @@ namespace WaypointQueue.UI
             return builder;
         }
 
-#if RR2026
         // How the train will stand at the waypoint, as chosen in the game's picker (Space while picking).
         private void BuildPoseField(ManagedWaypoint waypoint, UIPanelBuilder builder, bool isRouteWindow)
         {
@@ -912,7 +907,6 @@ namespace WaypointQueue.UI
             AddLabelOnlyTooltip(poseField, "Train stands", "How the train will stand at the waypoint, chosen with Space while picking it. If cars are picked up or set out before this waypoint, the same position is planned for the train as it is then.\n\nTo change it, adjust the waypoint and pick again; to let the train stand however it arrives, choose Clear train position.");
         }
 
-#endif
         private UIPanelBuilder BuildSendPastWaypointField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
         {
             var sendPastWaypointField = builder.AddField("Send past waypoint", builder.AddToggle(() => waypoint.MoveTrainPastWaypoint, (bool value) =>
@@ -965,8 +959,7 @@ namespace WaypointQueue.UI
                 AddConnectAirAndReleaseBrakeToggles(waypoint, builder, onWaypointChange);
             });
 
-
-            return builder;
+return builder;
         }
 
         private UIPanelBuilder BuildUncouplingModeField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
@@ -1035,8 +1028,7 @@ namespace WaypointQueue.UI
                     onWaypointChange(waypoint);
                 }));
 
-
-            AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeTooltip);
+AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeTooltip);
             return builder;
         }
 
@@ -1550,8 +1542,7 @@ namespace WaypointQueue.UI
                 }));
             });
 
-
-            if (waypoint.WillRefuel)
+if (waypoint.WillRefuel)
             {
                 var refuelSpeedLimitField = builder.AddField($"Refuel speed limit", builder.HStack((UIPanelBuilder field) =>
                 {
@@ -1900,13 +1891,9 @@ namespace WaypointQueue.UI
             Loader.LogDebug($"Building track destination options for {waypoint.Id}");
             List<DropdownOption> options = [new DropdownOption("Select a destination", ""), new DropdownOption(WaypointResolver.NoDestinationString, WaypointResolver.NoDestinationString)];
 
-#if RR2026
             // 2026.1 keeps the industry components by identifier instead of a car position table.
             var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_industryComponentLookup").GetValue<Dictionary<string, IndustryComponent>>()
                 .ToDictionary(kv => kv.Key, kv => (OpsCarPosition)kv.Value);
-#else
-            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_carPositionLookup").GetValue<Dictionary<string, OpsCarPosition>>();
-#endif
 
             string filter = waypoint.DestinationSearchText?.Trim().ToLower() ?? "";
 

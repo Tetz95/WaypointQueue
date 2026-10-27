@@ -2,11 +2,15 @@
   <!--
     SDK-style project: builds with the .NET SDK (dotnet build), no Visual Studio
     MSBuild needed. Every .cs file in this folder is compiled, so new source files
-    need no project entry. Building installs the mod with ..\Info.json.
+    need no project entry.
 
-    Build: dotnet build WaypointQueue/WaypointQueue.csproj
-    The game install folder comes from Paths.user (RrInstallDir).
+    This branch (rr2026) builds for Railroader 2026.1 only; the Legacy version stays on the tetz branch.
+    Build: dotnet build WaypointQueue/WaypointQueue.csproj  (installs into the 2026.1 home dir's Mods with ..\Info.json;
+    -p:NoInstall=true builds without installing). Game paths come from Paths.user (..\..\Railroader.paths.props).
   -->
+  <PropertyGroup>
+    <RR>2026</RR>
+  </PropertyGroup>
   <Import Project="..\Paths.user" Condition="Exists('..\Paths.user')" />
 
   <PropertyGroup>
@@ -17,64 +21,20 @@
     <RR2026Ported>true</RR2026Ported>
     <UsesHarmony>true</UsesHarmony>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <RrManagedDir>$(RrInstallDir)\Railroader_Data\Managed</RrManagedDir>
     <ModDirectory>$(RailroaderModsDir)\WaypointQueue</ModDirectory>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(RR)' != '2026'">
-    <PackageReference Include="UnityModManager" Version="0.32.4" PrivateAssets="all" ExcludeAssets="runtime" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="Nullable" Version="1.3.1" PrivateAssets="all" />
-  </ItemGroup>
+  <!-- The game's own loader and assemblies; Harmony is our own (the game ships none). -->
+  <Import Project="..\..\Railroader2026.refs.props" />
 
-  <!-- Railroader 2026.1 (-p:RR=2026): the game's own loader and assemblies, our own Harmony. -->
-  <Import Project="..\..\Railroader2026.refs.props" Condition="'$(RR)' == '2026'" />
-
-  <ItemGroup Condition="'$(RR)' != '2026'">
-    <Reference Include="Assembly-CSharp"><HintPath>$(RrManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Definition"><HintPath>$(RrManagedDir)\Definition.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="KeyValue.Runtime"><HintPath>$(RrManagedDir)\KeyValue.Runtime.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Newtonsoft.Json"><HintPath>$(RrManagedDir)\Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine"><HintPath>$(RrManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.CoreModule"><HintPath>$(RrManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(RrManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.InputModule"><HintPath>$(RrManagedDir)\UnityEngine.InputModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(RrManagedDir)\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(RrManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.UI"><HintPath>$(RrManagedDir)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.UIModule"><HintPath>$(RrManagedDir)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(RrManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(RrManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Unity.InputSystem"><HintPath>$(RrManagedDir)\Unity.InputSystem.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Unity.RenderPipelines.Universal.Runtime"><HintPath>$(RrManagedDir)\Unity.RenderPipelines.Universal.Runtime.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Unity.TextMeshPro"><HintPath>$(RrManagedDir)\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
-  </ItemGroup>
-
-  <!-- Install into the game's Mods folder. Settings.xml there is left alone. -->
-  <Target Name="InstallMod" AfterTargets="Build" Condition="Exists('..\Paths.user') And '$(RR)' != '2026' And '$(NoInstall)' != 'true'">
-    <MakeDir Directories="$(ModDirectory)" />
-    <!-- Delete before copying: Vortex deploys hardlinks, and copying over one would also change Vortex's own copy. -->
-    <ItemGroup>
-      <_InstallFiles Remove="@(_InstallFiles)" />
-      <_InstallFiles Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;..\Info.json" />
-    </ItemGroup>
-    <ItemGroup>
-      <_InstallTargets Remove="@(_InstallTargets)" />
-      <_InstallTargets Include="$(ModDirectory)\\%(_InstallFiles.Filename)%(_InstallFiles.Extension)" />
-    </ItemGroup>
-    <Delete Files="@(_InstallTargets)" />
-    <Copy SourceFiles="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;..\Info.json" DestinationFolder="$(ModDirectory)" />
-  </Target>
-  <!-- Railroader 2026.1 (-p:RR=2026): install into the 2026.1 home dir's Mods with our own Harmony, and Info.rr2026.json
-       as Info.json (the game's loader wants a three-part version, so 1.8.2.24 is 1.8.24 there). Skipped with
-       -p:NoInstall=true. Settings.xml there is left alone. -->
-  <Target Name="InstallMod2026" AfterTargets="Build" Condition="'$(RR)' == '2026' And '$(NoInstall)' != 'true'">
+  <!-- Install with our Harmony beside the DLL. Delete before copying (Vortex may hardlink). Settings.xml there is
+       left alone. -->
+  <Target Name="InstallMod" AfterTargets="Build" Condition="Exists('..\Paths.user') And '$(NoInstall)' != 'true'">
     <MakeDir Directories="$(ModDirectory)" />
     <ItemGroup>
-      <_Install2026 Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;$(OutDir)0Harmony.dll" />
+      <_InstallFiles Include="$(OutDir)$(AssemblyName).dll;$(OutDir)$(AssemblyName).pdb;$(OutDir)0Harmony.dll;..\Info.json" />
     </ItemGroup>
-    <Delete Files="@(_Install2026->'$(ModDirectory)\%(Filename)%(Extension)');$(ModDirectory)\Info.json" />
-    <Copy SourceFiles="@(_Install2026)" DestinationFolder="$(ModDirectory)" />
-    <Copy SourceFiles="..\Info.rr2026.json" DestinationFiles="$(ModDirectory)\Info.json" />
+    <Delete Files="@(_InstallFiles->'$(ModDirectory)\%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(_InstallFiles)" DestinationFolder="$(ModDirectory)" />
   </Target>
 </Project>

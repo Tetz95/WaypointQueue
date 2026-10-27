@@ -1,4 +1,3 @@
-#if RR2026
 // Railroader 2026.1 has its own mod loader instead of Unity Mod Manager, and no settings support for DLL mods. This
 // file stands in for the parts of UMM this mod uses, so the settings class and loader compile unchanged: the Draw
 // attributes only describe the settings (SettingsWindow builds the in-game window from them), settings are saved to
@@ -241,4 +240,3 @@ namespace GalaSoft.MvvmLight.Messaging
         }
     }
 }
-#endif
