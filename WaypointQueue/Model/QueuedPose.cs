@@ -79,16 +79,22 @@ namespace WaypointQueue.Model
             return pose.IsEmpty ? null : pose;
         }
 
-        public static QueuedPose From(OrderWaypoint waypoint)
+        // The pose of a pick. Unless the player chose one (Space while picking), the picker offers the way the train
+        // would arrive from where it stands now; a queued waypoint runs from wherever the earlier ones leave the train,
+        // and holding it to that pose could send it off to be turned. Only the end of a car to couple to is kept then.
+        public static QueuedPose From(OrderWaypoint waypoint, bool poseChosen)
         {
             var pose = new QueuedPose
             {
-                ArrivingEnd = (int)waypoint.ArrivingEnd,
-                BodyToward = (int)waypoint.BodyToward,
                 CoupleToCarEnd = waypoint.CoupleToCarEnd.HasValue ? (int)waypoint.CoupleToCarEnd.Value : null,
-                Turns = OrderWaypoint.EncodeTurns(waypoint.RequiredTurns),
-                BodyLength = waypoint.BodyLength,
             };
+            if (poseChosen)
+            {
+                pose.ArrivingEnd = (int)waypoint.ArrivingEnd;
+                pose.BodyToward = (int)waypoint.BodyToward;
+                pose.Turns = OrderWaypoint.EncodeTurns(waypoint.RequiredTurns);
+                pose.BodyLength = waypoint.BodyLength;
+            }
             return pose.IsEmpty ? null : pose;
         }
 

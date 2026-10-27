@@ -20,6 +20,13 @@ namespace WaypointQueue.UI
 
         public static bool IsPending => _pending != null;
 
+        private static readonly AccessTools.FieldRef<AutoEngineerDestinationPicker, bool> PoseChosenRef =
+            AccessTools.FieldRefAccess<AutoEngineerDestinationPicker, bool>("_poseChosen");
+
+        // Whether the player picked the pose (pressed Space) in the pick being committed, rather than taking the
+        // picker's default (the way the train would arrive from where it is now).
+        public static bool PoseChosen => AutoEngineerDestinationPicker.Shared != null && PoseChosenRef(AutoEngineerDestinationPicker.Shared);
+
         public static bool Start(BaseLocomotive locomotive, Action<Location, string, QueuedPose> onPicked)
         {
             var picker = AutoEngineerDestinationPicker.Shared;
@@ -43,7 +50,7 @@ namespace WaypointQueue.UI
                 return false;
             }
             _pending = null;
-            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint));
+            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint, PoseChosen));
             return true;
         }
 

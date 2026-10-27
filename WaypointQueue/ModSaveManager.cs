@@ -69,7 +69,8 @@ internal List<LocoWaypointState> LoadLocoWaypointStatesFromSave()
             {
                 if (_saveName == null || _saveName.Length == 0)
                 {
-                    throw new InvalidOperationException("No save name detected when trying to load waypoint state");
+                    // Railroader 2026.1 never had these pre-1.6 files and gives no save name: nothing to read.
+                    return [];
                 }
                 string fullSavePath = PathForSavedWaypoints(_saveName);
                 if (!File.Exists(fullSavePath))
@@ -97,7 +98,8 @@ internal List<LocoWaypointState> LoadLocoWaypointStatesFromSave()
             {
                 if (_saveName == null || _saveName.Length == 0)
                 {
-                    throw new InvalidOperationException("No save name detected when trying to load route assignment state");
+                    // Railroader 2026.1 never had these pre-1.6 files and gives no save name: nothing to read.
+                    return [];
                 }
                 string fullSavePath = PathForSavedAssignments(_saveName);
 
@@ -125,7 +127,8 @@ internal List<LocoWaypointState> LoadLocoWaypointStatesFromSave()
             {
                 if (_saveName == null || _saveName.Length == 0)
                 {
-                    throw new InvalidOperationException("No save name detected when trying to load routes state");
+                    // Railroader 2026.1 never had these pre-1.6 files and gives no save name: nothing to read.
+                    return [];
                 }
                 string fullSavePath = PathForSavedRoutes(_saveName);
 
