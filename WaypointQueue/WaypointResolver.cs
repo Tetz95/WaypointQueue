@@ -578,6 +578,24 @@ namespace WaypointQueue
             {
                 return false;
             }
+            // The point past the waypoint is reached by the auto engineer's own best route, which need not run through the
+            // waypoint: past a yard track's far end it can lie on the main, and the train then stayed on the main and never
+            // took the yard track. Ordered early only when that route still runs over the waypoint's track; otherwise the
+            // train runs to the waypoint itself and is sent past on arrival.
+            Location clearPoint;
+            try
+            {
+                clearPoint = ClearPoint(wp, approachFrom);
+            }
+            catch (Exception)
+            {
+                return false;                                      // doesn't fit past: reported on arrival as before
+            }
+            if (!RouteRunsOverWaypoint(wp, clearPoint))
+            {
+                Loader.LogDebug($"{wp.Locomotive.Ident}: the best route past the waypoint doesn't run over it; sending past on arrival");
+                return false;
+            }
             Loader.Log($"{wp.Locomotive.Ident} is on its last approach to the waypoint ({closestDistance:F0} m); sending it past now");
             try
             {
@@ -586,6 +604,55 @@ namespace WaypointQueue
             catch (WaypointProcessingException e)
             {
                 HandleProcessingError("Move past waypoint", e, wp);
+                return false;
+            }
+        }
+
+        private static readonly MethodInfo PlannerRouteStart = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation");
+
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, float> PlannerMaximumLength =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, float>("_maximumLength");
+
+        // The game's own route search (as the auto engineer will run it) from where the train is now to the point past the
+        // waypoint: does it run over the waypoint's track segment? When in doubt, no (send past on arrival).
+        private static bool RouteRunsOverWaypoint(ManagedWaypoint wp, Location clearPoint)
+        {
+            try
+            {
+                AutoEngineerPlanner planner = (wp.Locomotive as BaseLocomotive)?.AutoEngineerPlanner;
+                TrackSegment segment = wp.Location.segment;
+                if (planner == null || segment == null || PlannerRouteStart == null)
+                {
+                    return false;
+                }
+                if (clearPoint.segment == segment)
+                {
+                    return true;
+                }
+                object[] args = { 0f };
+                Location start = (Location)PlannerRouteStart.Invoke(planner, args);
+                var steps = new List<Track.Search.RouteSearch.Step>();
+                if (!Track.Search.RouteSearch.FindRoute(Graph.Shared, start, clearPoint, Track.Search.HeuristicCosts.AutoEngineer, steps, out _,
+                        checkForCars: false, PlannerMaximumLength(planner), (float)args[0]))
+                {
+                    return false;
+                }
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    if (steps[i].Location.segment == segment)
+                    {
+                        return true;
+                    }
+                    if (i > 0 && steps[i].Node != null && steps[i - 1].Node != null
+                        && (steps[i].Node == segment.a && steps[i - 1].Node == segment.b || steps[i].Node == segment.b && steps[i - 1].Node == segment.a))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception)
+            {
                 return false;
             }
         }
@@ -643,21 +710,11 @@ namespace WaypointQueue
             waypoint.MoveTrainPastWaypoint = false;
 
             Loader.Log($"Beginning order to clear {waypoint.Locomotive.Ident} train past the waypoint");
-            (_, Location furthestCarLocation) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out _, out _, out _, out _, out _);
-
-            float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
-
-            // Past the waypoint is away from where the train comes from: its far end on arrival, or (ordered on the
-            // approach) the route's point before the waypoint, so where the train stands on the way in doesn't matter.
-            Location orientedLocation = approachFrom.HasValue
-                ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
-                : Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
             Location locationToMove;
 
             try
             {
-                locationToMove = Graph.Shared.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
-                locationToMove.AssertValid();
+                locationToMove = ClearPoint(waypoint, approachFrom);
             }
             catch (Exception e)
             {
@@ -672,6 +729,21 @@ namespace WaypointQueue
             Loader.Log($"Sending train of {waypoint.Locomotive.Ident} to {locationToMove} past the waypoint");
             autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
             return true;
+        }
+
+        // One train length past the waypoint. Past is away from where the train comes from: its far end on arrival, or
+        // (ordered on the approach) the route's point before the waypoint, so where the train stands on the way in
+        // doesn't matter. Throws when the train doesn't fit past.
+        private Location ClearPoint(ManagedWaypoint waypoint, Vector3? approachFrom)
+        {
+            (_, Location furthestCarLocation) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out _, out _, out _, out _, out _);
+            float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
+            Location orientedLocation = approachFrom.HasValue
+                ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
+                : Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
+            Location location = Graph.Shared.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
+            location.AssertValid();
+            return location;
         }
 
         private static Location OrientedAwayFrom(Location location, Vector3 point)
