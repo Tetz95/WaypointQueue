@@ -14,7 +14,12 @@ namespace WaypointQueue.Services
     {
         public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null)
         {
+#if RR2026
+            // 2026.1 waypoint orders carry the location as a string.
+            OrderWaypoint? maybeWaypoint = new OrderWaypoint(GraphCompat.LocationToString(InsideSegment(location)), coupleToCarId);
+#else
             (Location, string)? maybeWaypoint = (InsideSegment(location), coupleToCarId);
+#endif
             ordersHelper.SetOrdersValue(null, null, null, null, maybeWaypoint);
         }
 

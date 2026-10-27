@@ -78,7 +78,7 @@ namespace WaypointQueue
         {
             private static MethodBase TargetMethod() => AccessTools.Method(typeof(AutoEngineerPlanner), "UpdateWaypointRouteIfNeeded");
 
-            private static readonly MethodInfo RouteStartLocation = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation");
+            private static readonly MethodInfo RouteStartLocation = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation", [typeof(float).MakeByRefType()]);
             private static readonly AccessTools.FieldRef<AutoEngineerPlanner, global::Model.AI.Orders> OrdersRef = AccessTools.FieldRefAccess<AutoEngineerPlanner, global::Model.AI.Orders>("_orders");
             private static readonly AccessTools.FieldRef<AutoEngineerPlanner, float> MaximumLength = AccessTools.FieldRefAccess<AutoEngineerPlanner, float>("_maximumLength");
 

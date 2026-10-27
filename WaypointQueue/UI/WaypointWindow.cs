@@ -727,7 +727,7 @@ namespace WaypointQueue.UI
                         dismiss();
                     });
                 });
-            }, 500);
+            }, width: 500);
         }
 
         private UIPanelBuilder BuildStatusLabelField(string label, UIPanelBuilder builder)
@@ -1862,7 +1862,13 @@ namespace WaypointQueue.UI
             Loader.LogDebug($"Building track destination options for {waypoint.Id}");
             List<DropdownOption> options = [new DropdownOption("Select a destination", ""), new DropdownOption(WaypointResolver.NoDestinationString, WaypointResolver.NoDestinationString)];
 
+#if RR2026
+            // 2026.1 keeps the industry components by identifier instead of a car position table.
+            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_industryComponentLookup").GetValue<Dictionary<string, IndustryComponent>>()
+                .ToDictionary(kv => kv.Key, kv => (OpsCarPosition)kv.Value);
+#else
             var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_carPositionLookup").GetValue<Dictionary<string, OpsCarPosition>>();
+#endif
 
             string filter = waypoint.DestinationSearchText?.Trim().ToLower() ?? "";
 

@@ -7,6 +7,12 @@ namespace WaypointQueue.UI
 {
     internal class WindowHelper
     {
+#if RR2026
+        public static void CreateWindow<TWindow>(Action<TWindow> configure) where TWindow : Component, IBuilderWindow
+        {
+            WindowManager.Shared.CreateWindowWithComponent(configure);
+        }
+#else
         private static ProgrammaticWindowCreator _programmaticWindowCreator;
         private static ProgrammaticWindowCreator ProgrammaticWindowCreator
         {
@@ -46,5 +52,6 @@ namespace WaypointQueue.UI
             var createWindow = typeof(ProgrammaticWindowCreator).GetMethod("CreateWindow", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null, paramTypes, null);
             createWindow.MakeGenericMethod(typeof(TWindow)).Invoke(ProgrammaticWindowCreator, [identifier, width, height, position, sizing, configure]);
         }
+#endif
     }
 }

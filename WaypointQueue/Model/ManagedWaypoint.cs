@@ -27,7 +27,7 @@ namespace WaypointQueue
         {
             Version = 1;
             LocomotiveId = locomotive?.id ?? null;
-            LocationString = Graph.Shared.LocationToString(location);
+            LocationString = GraphCompat.LocationToString(location);
             CoupleToCarId = coupleToCarId;
 
             ConnectAirOnCouple = Loader.Settings.ConnectAirByDefault;
@@ -624,7 +624,7 @@ namespace WaypointQueue
         {
             Location clampedLocation = loc.Clamped();
             _location = clampedLocation;
-            LocationString = Graph.Shared.LocationToString(clampedLocation);
+            LocationString = GraphCompat.LocationToString(clampedLocation);
         }
 
         public bool TryCopyForRoute(out ManagedWaypoint copy, BaseLocomotive loco = null)

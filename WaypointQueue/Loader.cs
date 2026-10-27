@@ -12,6 +12,17 @@ using WaypointQueue.Wrappers;
 
 namespace WaypointQueue.UUM
 {
+#if RR2026
+    public sealed class ModEntryPoint : Railroader.Modding.IModEntryPoint
+    {
+        public void OnModLoad(Railroader.Modding.IModContext context) => Loader.Start(context);
+
+        public void OnModUnload()
+        {
+        }
+    }
+
+#endif
     public static class Loader
     {
         public static UnityModManager.ModEntry ModEntry { get; private set; }
@@ -31,6 +42,29 @@ namespace WaypointQueue.UUM
 
         public static GameObject RouteStorageGO { get; private set; }
 
+#if RR2026
+        // Railroader 2026.1 loads the mod through ModEntryPoint below; a UMM-style mod entry (Rr2026/UmmShim.cs) keeps
+        // the rest of the loader as it is, and LoaderUpdater calls OnUpdate every frame as UMM did.
+        internal static void Start(Railroader.Modding.IModContext context)
+        {
+            var modEntry = new UnityModManager.ModEntry
+            {
+                Info = new UnityModManager.ModInfo { Id = "WaypointQueue", DisplayName = "Waypoint Queue (Tetz fork)" },
+                Path = context.ModDirectory,
+                Logger = new UnityModManager.ModLogger(context.Log),
+            };
+            if (!Load(modEntry)) return;
+            var updater = new GameObject("WaypointQueueUpdater");
+            UnityEngine.Object.DontDestroyOnLoad(updater);
+            updater.AddComponent<LoaderUpdater>();
+        }
+
+        private class LoaderUpdater : MonoBehaviour
+        {
+            private void Update() => ModEntry?.OnUpdate?.Invoke(ModEntry, Time.deltaTime);
+        }
+
+#endif
         private static bool Load(UnityModManager.ModEntry modEntry)
         {
             if (ModEntry != null)
@@ -172,7 +206,9 @@ namespace WaypointQueue.UUM
 
         private static void OnGUI(UnityModManager.ModEntry modEntry)
         {
+#if !RR2026
             Settings.Draw(modEntry);
+#endif
         }
 
         private static void OnSaveGUI(UnityModManager.ModEntry modEntry)

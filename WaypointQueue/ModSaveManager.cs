@@ -63,12 +63,15 @@ namespace WaypointQueue
             public List<RouteDefinition> RouteDefinitions { get; set; } = [];
         }
 
+#if !RR2026
+        // Only for reading the waypoint files of older versions; 2026.1 has no such files and no WorldStore.Load(saveName).
         [HarmonyPostfix]
         [HarmonyPatch(typeof(WorldStore), nameof(WorldStore.Load))]
         static void LoadPostfix(string saveName)
         {
             Shared._saveName = saveName;
         }
+#endif
 
         internal List<LocoWaypointState> LoadLocoWaypointStatesFromSave()
         {

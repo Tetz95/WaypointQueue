@@ -88,7 +88,7 @@ namespace WaypointQueue
                         // No route (a turntable not lined to the waypoint's stall, say): the search reports 0 m, which
                         // matched the planner's "At waypoint" 0 m and turned its stop into running at track speed, so
                         // the train drove off in whatever direction it faced and kept going. Only a found route counts.
-                        bool routeFound = GraphRouteSearchExtension.TryFindDistance(Graph.Shared, closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance, out float traverseTimeSeconds);
+                        bool routeFound = Graph.Shared.TryFindDistance(closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance, out float traverseTimeSeconds);
 
                         Targets.Target t = updatedTargets[indexOfWaypoint];
                         if (routeFound && Mathf.Abs(totalDistance - t.Distance) < 10f)
@@ -122,6 +122,32 @@ namespace WaypointQueue
         private const float HighSpeedMphThreshold = 35f;
         private const float HighSpeedWaypointRadiusMeters = 25f;
 
+#if RR2026
+        [HarmonyPostfix]
+        [HarmonyPatch("CheckWaypointArrival")]
+        private static void CheckWaypointArrivalPostfix(
+            ref WaypointArrival __result,
+            BaseLocomotive ____locomotive,
+            Graph ____graph,
+            ref Location? ____routeTargetLocation
+        )
+        {
+            // Only "not there yet" can become arrived; the placement and coupling mismatches stay the game's call.
+            if (__result != WaypointArrival.NotYet)
+                return;
+            bool arrived = false;
+            IsWaypointSatisfiedPostfix(ref arrived, ____locomotive, ____graph, ref ____routeTargetLocation);
+            if (arrived)
+                __result = WaypointArrival.Arrived;
+        }
+
+        private static void IsWaypointSatisfiedPostfix(
+            ref bool __result,
+            BaseLocomotive ____locomotive,
+            Graph ____graph,
+            ref Location? ____routeTargetLocation
+        )
+#else
         [HarmonyPostfix]
         [HarmonyPatch("IsWaypointSatisfied")]
         private static void IsWaypointSatisfiedPostfix(
@@ -132,6 +158,7 @@ namespace WaypointQueue
             Graph ____graph,
             ref Location? ____routeTargetLocation
         )
+#endif
         {
             try
             {

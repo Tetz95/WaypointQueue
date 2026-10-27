@@ -511,7 +511,7 @@ namespace WaypointQueue.State
 
             if (oldOrdersLocation.IsValid)
             {
-                string oldLocString = Graph.Shared.LocationToString(oldOrdersLocation);
+                string oldLocString = GraphCompat.LocationToString(oldOrdersLocation);
                 string newLocString = newState.UnresolvedWaypoint.LocationString;
 
                 string oldCoupleId = oldOrdersCoupleToCarId ?? "";

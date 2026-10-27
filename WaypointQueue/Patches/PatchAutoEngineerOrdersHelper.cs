@@ -8,16 +8,41 @@ using UnityEngine;
 using WaypointQueue.State;
 using WaypointQueue.UUM;
 using Location = Track.Location;
+using Graph = Track.Graph;
 
 namespace WaypointQueue
 {
     [HarmonyPatch(typeof(AutoEngineerOrdersHelper))]
     internal class PatchAutoEngineerOrdersHelper
     {
+#if RR2026
+        // 2026.1: the picker hands over a whole OrderWaypoint, through SetWaypoint in waypoint mode or SetWaypointOrder
+        // (which also switches the engineer to waypoint mode). The queue keeps its location and the car to couple to;
+        // the pose the picker chose (arriving end, facing, turns) isn't kept yet.
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypoint))]
+        static bool SetWaypointPrefix(OrderWaypoint waypoint, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+            Location location = Graph.Shared.ResolveLocationString(waypoint.LocationString);
+            return SetWaypointPrefix(location, waypoint.CoupleToCarId, ref ____locomotive, ref ____persistence);
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypointOrder))]
+        static bool SetWaypointOrderPrefix(AutoEngineerOrdersHelper __instance, OrderWaypoint waypoint, int? maxSpeedMph, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+            __instance.SetOrdersValue(Game.Messages.AutoEngineerMode.Waypoint, null, maxSpeedMph, null, null);
+            return SetWaypointPrefix(waypoint, ref ____locomotive, ref ____persistence);
+        }
+
+        static bool SetWaypointPrefix(Location location, string coupleToCarId, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+#else
         [HarmonyPrefix]
         [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypoint))]
         static bool SetWaypointPrefix(Location location, string coupleToCarId, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
         {
+#endif
             //Loader.LogDebug($"SetWaypoint prefix");
 
             OrderWaypoint? existingWaypoint = ____persistence.Orders.Waypoint;

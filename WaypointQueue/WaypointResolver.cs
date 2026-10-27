@@ -608,7 +608,7 @@ namespace WaypointQueue
             }
         }
 
-        private static readonly MethodInfo PlannerRouteStart = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation");
+        private static readonly MethodInfo PlannerRouteStart = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation", [typeof(float).MakeByRefType()]);
 
         private static readonly AccessTools.FieldRef<AutoEngineerPlanner, float> PlannerMaximumLength =
             AccessTools.FieldRefAccess<AutoEngineerPlanner, float>("_maximumLength");
@@ -756,9 +756,14 @@ namespace WaypointQueue
 
         private float GetTrainLength(BaseLocomotive locomotive)
         {
+#if RR2026
+            // 2026.1: a public static over the given cars.
+            return AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
+#else
             MethodInfo calculateTotalLengthMI = AccessTools.Method(typeof(AutoEngineerPlanner), "CalculateTotalLength");
             float totalTrainLength = (float)calculateTotalLengthMI.Invoke(locomotive.AutoEngineerPlanner, []);
             return totalTrainLength;
+#endif
         }
 
         private void ResolveBrakeSystemOnCouple(ManagedWaypoint waypoint)

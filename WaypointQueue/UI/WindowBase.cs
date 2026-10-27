@@ -5,8 +5,16 @@ using UnityEngine;
 
 namespace WaypointQueue.UI
 {
+#if RR2026
+    // 2026.1: the game's WindowManager creates builder windows from an identifier and a WindowConfig.
+    public abstract class WindowBase : MonoBehaviour, IBuilderWindow
+    {
+        string IBuilderWindow.Identifier => WindowIdentifier;
+        public WindowConfig Config => new WindowConfig(DefaultSize, DefaultPosition, Sizing);
+#else
     public abstract class WindowBase : MonoBehaviour, IProgrammaticWindow
     {
+#endif
         protected Window Window => GetComponent<Window>();
         public UIBuilderAssets BuilderAssets { get; set; }
         public abstract string WindowIdentifier { get; }

@@ -1,4 +1,6 @@
-﻿using HarmonyLib;
+﻿#if !RR2026
+// Legacy only: 2026.1 rewrote the destination picker (waypoint poses); its HitLocation is gone.
+using HarmonyLib;
 using Helpers;
 using Model;
 using System;
@@ -91,3 +93,4 @@ namespace WaypointQueue
         }
     }
 }
+#endif

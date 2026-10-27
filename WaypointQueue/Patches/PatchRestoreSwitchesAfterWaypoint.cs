@@ -130,7 +130,7 @@ namespace WaypointQueue
                     Planner = new WeakReference<AutoEngineerPlanner>(planner),
                     Locomotive = new WeakReference<BaseLocomotive>(locomotive),
                     LocomotiveIdent = locomotive.Ident.ToString(),
-                    Position = node.transform.position.WorldToGame(),
+                    Position = GraphCompat.GamePosition(node),
                     AddedAt = Time.unscaledTime
                 });
                 Loader.LogDebug($"Loco {locomotive.Ident} couldn't reset switch {entry.Key} {why}; will reset it once the train is clear");
