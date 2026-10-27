@@ -223,6 +223,14 @@ namespace WaypointQueue.UI
             panelsByWaypointId.Clear();
 
             builder.Spacing = 12f;
+#if RR2026
+
+            builder.HStack(row =>
+            {
+                row.Spacer();
+                row.AddButtonCompact("Settings", () => SettingsWindow.Shared?.Toggle());
+            });
+#endif
 
             builder.VScrollView(delegate (UIPanelBuilder builder)
             {

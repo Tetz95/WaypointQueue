@@ -230,6 +230,11 @@ namespace WaypointQueue.UUM
 
             WindowHelper.CreateWindow<RouteManagerWindow>(null);
             RouteManagerWindow = RouteManagerWindow.Shared;
+#if RR2026
+
+            // No UMM settings page in 2026.1: the Waypoints window has a Settings button instead.
+            WindowHelper.CreateWindow<SettingsWindow>(null);
+#endif
         }
 
         public static void Log(string str)
