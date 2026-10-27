@@ -8,6 +8,7 @@ using Model.AI;
 using Model.AI.Waypoints;
 using Track;
 using Track.Search;
+using UnityEngine;
 #endif
 
 namespace WaypointQueue.Model
@@ -94,6 +95,38 @@ namespace WaypointQueue.Model
             return pose.IsEmpty ? null : pose;
         }
 
+        // Send past waypoint as a pose: the whole train past the mark, whichever end arrives on it. Past is away from
+        // the side the train comes in from: the auto engineer's own route there, from its last point before the mark
+        // (a train that runs round a loop or reverses first comes in from the far side). Without a route, the side
+        // nearer the locomotive, as the game's picker guesses it.
+        public static QueuedPose PastTheMark(BaseLocomotive locomotive, Location mark)
+        {
+            IGraphView graphView = Graph.Shared.Current;
+            Vector3 from = graphView.GetPosition(locomotive.LocationF);
+            if (PosedWaypoint.PlanNaturalArrival(locomotive, graphView, mark, null, new List<JunctionTurn>(), out List<RouteSearch.Step> route) && route != null)
+            {
+                Vector3 markPosition = graphView.GetPosition(mark);
+                for (int i = route.Count - 1; i >= 0; i--)
+                {
+                    if (Vector3.Distance(route[i].Position, markPosition) >= ApproachPointDistance)
+                    {
+                        from = route[i].Position;
+                        break;
+                    }
+                }
+            }
+            Vector3 sideA = graphView.GetPosition(graphView.LocationByMoving(WaypointPose.IntoBody(mark, TrackSegment.End.A), SideProbeDistance, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            Vector3 sideB = graphView.GetPosition(graphView.LocationByMoving(WaypointPose.IntoBody(mark, TrackSegment.End.B), SideProbeDistance, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            TrackSegment.End nearSide = (sideA - from).sqrMagnitude <= (sideB - from).sqrMagnitude ? TrackSegment.End.A : TrackSegment.End.B;
+            return new QueuedPose { BodyToward = (int)WaypointPose.ToBodyToward(nearSide.Flipped()) };
+        }
+
+        // The route's last point at least this far from the mark tells which side the train comes in from.
+        private const float ApproachPointDistance = 5f;
+
+        // How far to each side of the mark to look, as the game's picker does.
+        private const float SideProbeDistance = 20f;
+
         // A train counts as the same length within half a metre (coupler slack, rounding).
         private const float SameLengthTolerance = 0.5f;
 
@@ -105,15 +138,17 @@ namespace WaypointQueue.Model
             var end = (WaypointEnd)ArrivingEnd;
             var side = (Track.Search.BodyToward)BodyToward;
             Car.End? carEnd = CoupleToCarEnd.HasValue ? (Car.End)CoupleToCarEnd.Value : null;
-            JunctionTurn[] turns = OrderWaypoint.DecodeTurns(Turns);
-            if (BodyLength <= 0f || !IsPosed)
+            if (!IsPosed)
             {
                 return new OrderWaypoint(locationString, coupleToCarId, end, side, null, 0f, carEnd);
             }
-            float length = AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
-            if (System.Math.Abs(length - BodyLength) <= SameLengthTolerance)
+            if (BodyLength > 0f)
             {
-                return new OrderWaypoint(locationString, coupleToCarId, end, side, turns, BodyLength, carEnd);
+                float length = AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
+                if (System.Math.Abs(length - BodyLength) <= SameLengthTolerance)
+                {
+                    return new OrderWaypoint(locationString, coupleToCarId, end, side, OrderWaypoint.DecodeTurns(Turns), BodyLength, carEnd);
+                }
             }
             return PosedWaypoint.Order(locomotive, Graph.Shared.Current, mark, end, side, null, coupleToCarId, carEnd);
         }

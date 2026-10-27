@@ -643,8 +643,23 @@ namespace WaypointQueue
                 return;
             }
 
+            QueuedPose pose = waypoint.Pose;
+#if RR2026
+            // 2026.1 places the train past the waypoint itself (the "train past it" pose), so the move past isn't a
+            // second order after arriving. A pose the player picked already says where the train stands.
+            if (!waypoint.StopAtWaypoint && waypoint.MoveTrainPastWaypoint && !waypoint.HasAnyCouplingOrders)
+            {
+                if (pose == null || !pose.IsPosed)
+                {
+                    pose = QueuedPose.PastTheMark(state.Locomotive, waypoint.Location);
+                    waypoint.StatusLabel = "Sending train past waypoint";
+                }
+                waypoint.StopAtWaypoint = true;
+                waypoint.MoveTrainPastWaypoint = false;
+            }
+#endif
             Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
-            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, waypoint.Pose);
+            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
 
             _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
 
