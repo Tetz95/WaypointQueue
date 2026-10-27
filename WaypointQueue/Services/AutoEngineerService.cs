@@ -6,17 +6,22 @@ using System;
 using System.Reflection;
 using Track;
 using UI.EngineControls;
+using WaypointQueue.Model;
 using WaypointQueue.UUM;
 
 namespace WaypointQueue.Services
 {
     internal class AutoEngineerService(ICarService carService)
     {
-        public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null)
+        public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null, QueuedPose pose = null)
         {
 #if RR2026
-            // 2026.1 waypoint orders carry the location as a string.
-            OrderWaypoint? maybeWaypoint = new OrderWaypoint(GraphCompat.LocationToString(InsideSegment(location)), coupleToCarId);
+            // 2026.1 waypoint orders carry the location as a string, and the pose the player picked, if any.
+            Location mark = InsideSegment(location);
+            string locationString = GraphCompat.LocationToString(mark);
+            OrderWaypoint? maybeWaypoint = pose != null && !pose.IsEmpty
+                ? pose.ToOrder((BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value, mark, locationString, coupleToCarId)
+                : new OrderWaypoint(locationString, coupleToCarId);
 #else
             (Location, string)? maybeWaypoint = (InsideSegment(location), coupleToCarId);
 #endif

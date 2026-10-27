@@ -9,6 +9,7 @@ using UI;
 using UI.Common;
 using UnityEngine;
 using UnityEngine.Pool;
+using WaypointQueue.Model;
 using WaypointQueue.Services;
 using WaypointQueue.UUM;
 
@@ -40,6 +41,9 @@ namespace WaypointQueue.UI
         private string _cancelMessage = String.Empty;
 
         private RefuelService _refuelService;
+
+        // Pose of the pick being handled (2026.1's picker); null for a pick without one.
+        private QueuedPose _pickedPose;
 
         private static WaypointPicker _shared;
         public static WaypointPicker Shared
@@ -107,6 +111,12 @@ namespace WaypointQueue.UI
                 StopCoroutine(_coroutine);
             }
 
+#if RR2026
+            if (UseGamePicker(forRoute ? TrainController.Shared.SelectedLocomotive : waypoint.Locomotive))
+            {
+                return;
+            }
+#endif
             _coroutine = StartCoroutine(Loop());
 
             string message = "Click to move waypoint for route";
@@ -146,6 +156,12 @@ namespace WaypointQueue.UI
                 StopCoroutine(_coroutine);
             }
 
+#if RR2026
+            if (UseGamePicker(forRoute ? TrainController.Shared.SelectedLocomotive : beforeWaypoint.Locomotive))
+            {
+                return;
+            }
+#endif
             _coroutine = StartCoroutine(Loop());
 
             string message = "Click to insert a waypoint for route";
@@ -173,6 +189,12 @@ namespace WaypointQueue.UI
             _routeId = routeId;
             _cancelMessage = "Cancelled adding waypoint";
             _dontSnapToCars = [];
+#if RR2026
+            if (UseGamePicker(TrainController.Shared.SelectedLocomotive))
+            {
+                return;
+            }
+#endif
 
             _coroutine = StartCoroutine(Loop());
 
@@ -181,6 +203,28 @@ namespace WaypointQueue.UI
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
         }
 
+#if RR2026
+        // Picks with the game's picker, so the pose can be chosen. Route waypoints need a selected locomotive to size
+        // the train's footprint; without one the plain picker below is used.
+        private bool UseGamePicker(BaseLocomotive locomotive)
+        {
+            Action<Location, string> onSelected = _onWaypointSelected;
+            return GamePickerRedirect.Start(locomotive, (location, coupleToCarId, pose) =>
+            {
+                _pickedPose = pose;
+                try
+                {
+                    onSelected(location, coupleToCarId);
+                }
+                finally
+                {
+                    _pickedPose = null;
+                    Cancel();
+                }
+            });
+        }
+
+#endif
         private void ShowMessage(string message)
         {
             Toast.Present(message, ToastPosition.Bottom);
@@ -195,6 +239,7 @@ namespace WaypointQueue.UI
 
             _waypoint.OverwriteLocation(newLocation);
             _waypoint.CoupleToCarId = newCoupleToCarId;
+            _waypoint.Pose = _pickedPose;
 
             _waypoint.ClearRefueling();
 
@@ -205,13 +250,13 @@ namespace WaypointQueue.UI
 
         private void HandleInsertNewWaypoint(Location location, string coupleToCarId)
         {
-            ManagedWaypoint insertedWaypoint = new ManagedWaypoint((BaseLocomotive)_locomotive, location, coupleToCarId);
+            ManagedWaypoint insertedWaypoint = new ManagedWaypoint((BaseLocomotive)_locomotive, location, coupleToCarId) { Pose = _pickedPose };
             _onWaypointInsert(insertedWaypoint, _waypoint.Id);
         }
 
         private void HandleAddWaypointToRoute(Location location, string coupleToCarId)
         {
-            ManagedWaypoint addedWaypoint = new ManagedWaypoint(null, location, coupleToCarId);
+            ManagedWaypoint addedWaypoint = new ManagedWaypoint(null, location, coupleToCarId) { Pose = _pickedPose };
             _refuelService.CheckNearbyFuelLoaders(addedWaypoint);
             _onWaypointInsert(addedWaypoint, _routeId);
         }

@@ -332,7 +332,7 @@ namespace WaypointQueue
             return false;
         }
 
-        public void AddWaypoint(BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacing, bool isInsertingNext)
+        public void AddWaypoint(BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacing, bool isInsertingNext, QueuedPose pose = null)
         {
             Location clampedLocation = location.Clamped();
             bool isCoupling = coupleToCarId != null && coupleToCarId.Length > 0;
@@ -343,7 +343,7 @@ namespace WaypointQueue
             Loader.Log($"Trying to {actionName} waypoint for loco {loco.Ident} to {clampedLocation} with {couplingLogSegment}");
 
             LocoWaypointState entry = ModStateManager.Shared.GetLocoWaypointState(loco.id);
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupleToCarId);
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupleToCarId) { Pose = pose };
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             if (isReplacing && entry.Waypoints.Count > 0)
@@ -543,9 +543,23 @@ namespace WaypointQueue
         public void ResumeWaypoint(ManagedWaypoint waypoint)
         {
             Loader.Log($"Resuming the waypoint for {waypoint.Locomotive.Ident} after {waypoint.Errors.Count} error(s)");
+#if RR2026
+            // The train stopped short of the waypoint (wrong track or coupling ends): send it there again.
+            bool resend = waypoint.Errors.Any(e => e.ErrorType == PatchWaypointMismatch.ErrorType);
+#endif
             waypoint.Errors = [];
             waypoint.StatusLabel = "Running to waypoint";
             UpdateWaypoint(waypoint);
+#if RR2026
+            if (resend)
+            {
+                LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId);
+                if (state.Waypoints.FirstOrDefault()?.Id == waypoint.Id)
+                {
+                    SendToFirstWaypoint(state);
+                }
+            }
+#endif
         }
 
         public void ReorderWaypoint(ManagedWaypoint waypoint, int newIndex)
@@ -630,7 +644,7 @@ namespace WaypointQueue
             }
 
             Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
-            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId);
+            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, waypoint.Pose);
 
             _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
 

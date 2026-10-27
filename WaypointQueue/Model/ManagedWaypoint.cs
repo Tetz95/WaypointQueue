@@ -122,6 +122,10 @@ namespace WaypointQueue
         [JsonProperty]
         public string LocationString { get; private set; }
 
+        // Railroader 2026.1: how the train should stand at the waypoint (see QueuedPose); null for any way it arrives.
+        [JsonProperty]
+        public QueuedPose Pose { get; set; }
+
         private Location _location;
 
         [JsonIgnore]
@@ -746,6 +750,7 @@ namespace WaypointQueue
                    UncoupleDestinationId == other.UncoupleDestinationId &&
                    ExcludeMatchingCarsFromCut == other.ExcludeMatchingCarsFromCut &&
                    MoveTrainPastWaypoint == other.MoveTrainPastWaypoint &&
+                   (Pose?.SameAs(other.Pose) ?? other.Pose == null || other.Pose.IsEmpty) &&
                    CurrentlyWaitingBeforeCutting == other.CurrentlyWaitingBeforeCutting &&
                    StatusLabel == other.StatusLabel &&
                    Name == other.Name &&
@@ -822,6 +827,10 @@ namespace WaypointQueue
                 [ValueKeys.StatusLabel] = Value.String(StatusLabel),
                 [ValueKeys.Errors] = Value.Array(Errors.Select(e => e.ToPropertyValue()).ToList()),
             };
+            if (Pose != null && !Pose.IsEmpty)
+            {
+                dictionary[ValueKeys.Pose] = Pose.ToPropertyValue();
+            }
             return Value.Dictionary(dictionary.ToDictionary(k => k.Key, v => v.Value));
         }
 
@@ -887,6 +896,7 @@ namespace WaypointQueue
             waypoint.CurrentlyWaitingBeforeCutting = dict[ValueKeys.CurrentlyWaitingBeforeCutting].BoolValue; ;
             waypoint.StatusLabel = dict[ValueKeys.StatusLabel].StringValue;
             waypoint.Errors = [.. dict[ValueKeys.Errors].ArrayValue.ToList().Select(e => WaypointError.FromPropertyValue(e))];
+            waypoint.Pose = dict.TryGetValue(ValueKeys.Pose, out Value pose) ? QueuedPose.FromPropertyValue(pose) : null;
 
             if (dict.ContainsKey(ValueKeys.EnableMultipleRefueling))
             {
@@ -981,6 +991,7 @@ namespace WaypointQueue
             internal static string CurrentlyWaitingBeforeCutting = "currently_waiting_before_cutting";
             internal static string StatusLabel = "status_label";
             internal static string Errors = "errors";
+            internal static string Pose = "pose";
         }
     }
 
