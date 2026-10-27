@@ -95,6 +95,36 @@ namespace WaypointQueue.Model
             return pose.IsEmpty ? null : pose;
         }
 
+        // How the train will stand, in the picker's words ("Front of train on the mark, train past it"). Front is the
+        // locomotive's front; short of and past are seen from the side the locomotive is on now, so for a waypoint
+        // further down the queue they're only a guide. Null for a waypoint without a pose.
+        public string Describe(BaseLocomotive locomotive, Location mark)
+        {
+            if (!IsPosed)
+            {
+                return null;
+            }
+            string end = ArrivingEnd == 0 ? "Either end of train" : "End " + ((WaypointEnd)ArrivingEnd) + " of train";
+            string side = BodyToward == 0 ? "" : ", train lies toward segment end " + (BodyToward == 1 ? "A" : "B");
+            if (locomotive != null)
+            {
+                if (ArrivingEnd != 0)
+                {
+                    bool front = PosedWaypoint.ToWaypointEnd(PosedWaypoint.FrontEnd(locomotive)) == (WaypointEnd)ArrivingEnd;
+                    end = front ? "Front of train" : "Back of train";
+                }
+                if (BodyToward != 0)
+                {
+                    TrackSegment.End nearSide = global::UI.Waypoints.WaypointPoseCycle.NearSideOf(Graph.Shared.Current, mark, locomotive, out _);
+                    bool shortOf = WaypointPose.ToSegmentEnd((Track.Search.BodyToward)BodyToward) == nearSide;
+                    side = shortOf ? ", train short of it" : ", train past it";
+                }
+            }
+            int junctions = Turns == null ? 0 : Turns.Length / 3;
+            string over = junctions > 0 ? $" (over {junctions} junction{(junctions == 1 ? "" : "s")})" : "";
+            return end + " on the mark" + side + over;
+        }
+
         // Send past waypoint as a pose: the whole train past the mark, whichever end arrives on it. Past is away from
         // the side the train comes in from: the auto engineer's own route there, from its last point before the mark
         // (a train that runs round a loop or reverses first comes in from the far side). Without a route, the side

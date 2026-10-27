@@ -404,6 +404,10 @@ namespace WaypointQueue.UI
 
                     BuildSendPastWaypointField(waypoint, row, onWaypointChange);
                 });
+#if RR2026
+
+                BuildPoseField(waypoint, builder, isRouteWindow);
+#endif
 
                 if (!waypoint.StopAtWaypoint && !waypoint.IsCoupling)
                 {
@@ -624,6 +628,7 @@ namespace WaypointQueue.UI
             var editNameAndNotesRow = new DropdownMenu.RowData("Edit name and notes", "");
             var removeWaitRow = new DropdownMenu.RowData("Remove wait", "");
             var deleteWaypointRow = new DropdownMenu.RowData("Delete", "");
+            var clearPoseRow = new DropdownMenu.RowData("Clear train position", "Lets the train stand however it arrives");
 
             // Ordering
             options.Add(jumpToWaypointRow);
@@ -644,6 +649,10 @@ namespace WaypointQueue.UI
             if (waypoint.WillWait)
             {
                 options.Add(removeWaitRow);
+            }
+            if (waypoint.Pose != null && waypoint.Pose.IsPosed)
+            {
+                options.Add(clearPoseRow);
             }
             options.Add(deleteWaypointRow);
 
@@ -668,6 +677,12 @@ namespace WaypointQueue.UI
                 if (value == options.IndexOf(adjustWaypointRow))
                 {
                     WaypointPicker.Shared.StartAdjustingWaypoint(waypoint, onWaypointChange, isRouteWindow);
+                }
+
+                if (options.Contains(clearPoseRow) && value == options.IndexOf(clearPoseRow))
+                {
+                    waypoint.Pose = null;
+                    onWaypointChange(waypoint);
                 }
 
                 if (value == options.IndexOf(removeCouplingRow))
@@ -883,6 +898,21 @@ namespace WaypointQueue.UI
             return builder;
         }
 
+#if RR2026
+        // How the train will stand at the waypoint, as chosen in the game's picker (Space while picking).
+        private void BuildPoseField(ManagedWaypoint waypoint, UIPanelBuilder builder, bool isRouteWindow)
+        {
+            BaseLocomotive locomotive = isRouteWindow ? TrainController.Shared.SelectedLocomotive : waypoint.Locomotive;
+            string description = waypoint.Pose?.Describe(locomotive, waypoint.Location);
+            if (description == null)
+            {
+                return;
+            }
+            var poseField = builder.AddField("Train stands", builder.AddLabel(description));
+            AddLabelOnlyTooltip(poseField, "Train stands", "How the train will stand at the waypoint, chosen with Space while picking it. If cars are picked up or set out before this waypoint, the same position is planned for the train as it is then.\n\nTo change it, adjust the waypoint and pick again; to let the train stand however it arrives, choose Clear train position.");
+        }
+
+#endif
         private UIPanelBuilder BuildSendPastWaypointField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
         {
             var sendPastWaypointField = builder.AddField("Send past waypoint", builder.AddToggle(() => waypoint.MoveTrainPastWaypoint, (bool value) =>
