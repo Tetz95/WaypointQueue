@@ -493,6 +493,7 @@ namespace WaypointQueue.State
             // When all waypoints are deleted or if the first waypoint got deleted
             if (newState.Waypoints.Count == 0 || newState.UnresolvedWaypoint == null)
             {
+                Loader.LogDebug($"{oldState.Locomotive?.Ident}: queue changed with {newState.Waypoints.Count} waypoint(s), first unresolved {(newState.UnresolvedWaypoint == null ? "none" : newState.UnresolvedWaypoint.Id)} (was {oldState.UnresolvedWaypoint.Id}): cancelling orders");
                 _waypointResolver.CleanupBeforeRemovingWaypoint(oldState.UnresolvedWaypoint);
                 _autoEngineerService.CancelActiveOrders(oldState.Locomotive);
                 return;
