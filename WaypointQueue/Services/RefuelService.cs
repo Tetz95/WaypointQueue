@@ -96,7 +96,7 @@ namespace WaypointQueue.Services
             waypoint.OverwriteLocation(locationToMove);
             waypoint.StopAtWaypoint = true;
             WaypointQueueController.Shared.UpdateWaypoint(waypoint);
-            autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
+            autoEngineerService.SendToPosedMark(ordersHelper, locationToMove);
         }
 
         private List<BaseLocomotive> GetCoupledLocosForRefuel(BaseLocomotive locomotive, string refuelLoadName, Location location)
@@ -114,6 +114,10 @@ namespace WaypointQueue.Services
             return [];
         }
 
+        // Where the train's leading end has to stop for the fuel car's slot to sit at the loader, facing outward from the
+        // train (the train behind it). The slot has to travel from where it is to the loader; the train end on that side
+        // travels the same distance. 2026.1's engineer counts a plain waypoint reached as soon as it lies under the train,
+        // and a refuel mark nearly always does, so the mark goes out as a posed waypoint (SendToPosedMark).
         private Location GetRefuelLocation(BaseLocomotive locomotive, ManagedWaypoint waypoint)
         {
             Car fuelCar = GetFuelCar(locomotive);
@@ -125,75 +129,37 @@ namespace WaypointQueue.Services
             {
                 throw new RefuelException($"Failed to get track graph location from refuel game point {waypoint.RefuelPoint}.", waypoint);
             }
+            if (!Graph.Shared.TryGetLocationFromGamePoint(loadSlotPosition, 10f, out Location slotLocation))
+            {
+                throw new RefuelException($"Failed to get track graph location for {fuelCar.Ident}'s {waypoint.RefuelLoadName} slot at {loadSlotPosition}.", waypoint);
+            }
 
             (Location closestTrainEndLocation, Location furthestTrainEndLocation) = carService.GetTrainEndLocations(locomotive, targetLoaderLocation, out _, out _, out _, out _, out _);
 
-            LogicalEnd furthestFuelCarEnd = carService.ClosestLogicalEndTo(fuelCar, furthestTrainEndLocation);
-            LogicalEnd closestFuelCarEnd = carService.GetOppositeEnd(furthestFuelCarEnd);
+            float distanceToMove = Graph.Shared.GetDistanceBetweenClose(slotLocation, targetLoaderLocation);
+            TrackSegment.End towardLoader = Graph.Shared.LocationOrientedToward(slotLocation, targetLoaderLocation).end;
 
-            List<Car> coupledCarsToEnd = carService.EnumerateAdjacentCarsTowardEnd(fuelCar, furthestFuelCarEnd, inclusive: true);
-            float distanceFromFurthestEndOfTrainToFuelCarInclusive = CarService.CalculateTotalLength(coupledCarsToEnd);
-
-            float distanceFromClosestFuelCarEndToSlot = Vector3.Distance(fuelCar.LocationFor(closestFuelCarEnd).GetPosition().ZeroY(), loadSlotPosition.ZeroY());
-
-            float totalTrainLength = CarService.CalculateTotalLength([.. locomotive.EnumerateCoupled()]);
-
-            //Loader.LogDebug($"Total train length is {totalTrainLength}");
-            //Loader.LogDebug($"distanceFromFurthestEndOfTrainToFuelCarInclusive is {distanceFromFurthestEndOfTrainToFuelCarInclusive}");
-            //Loader.LogDebug($"distanceFromClosestFuelCarEndToSlot is {distanceFromClosestFuelCarEndToSlot}");
-
-            Location locationToMoveToward = new();
-            float distanceToMove = 0;
-
-            Vector3 targetLoaderPosition = targetLoaderLocation.GetPosition();
-            Vector3 closestTrainEndPosition = closestTrainEndLocation.GetPosition();
-            Vector3 furthestTrainEndPosition = furthestTrainEndLocation.GetPosition();
-
-            // Some small locomotives may have a load slot outside the calculated train end positions
-            bool slotBeyondFurthestEnd = IsTargetBetween(furthestTrainEndPosition, loadSlotPosition, closestTrainEndPosition, inclusive: true);
-            bool slotBeyondClosestEnd = IsTargetBetween(closestTrainEndPosition, loadSlotPosition, furthestTrainEndPosition, inclusive: true);
-
-            var clampedSlotPosition = loadSlotPosition;
-            if (slotBeyondClosestEnd)
+            // The leading end: the train end that lies the way the slot has to go (if neither does, the slot is beyond the
+            // train's end on that side: the end nearest the slot).
+            Location leadingEnd;
+            if (Graph.Shared.LocationOrientedToward(slotLocation, closestTrainEndLocation).end == towardLoader)
             {
-                clampedSlotPosition = closestTrainEndPosition;
-            } else if (slotBeyondFurthestEnd)
+                leadingEnd = closestTrainEndLocation;
+            }
+            else if (Graph.Shared.LocationOrientedToward(slotLocation, furthestTrainEndLocation).end == towardLoader)
             {
-                clampedSlotPosition = furthestTrainEndPosition;
+                leadingEnd = furthestTrainEndLocation;
+            }
+            else
+            {
+                leadingEnd = Graph.Shared.GetDistanceBetweenClose(slotLocation, closestTrainEndLocation) <= Graph.Shared.GetDistanceBetweenClose(slotLocation, furthestTrainEndLocation)
+                    ? closestTrainEndLocation
+                    : furthestTrainEndLocation;
             }
 
-            //Loader.LogDebug($"Checking if slot is in between loader and closest end");
-            if (IsTargetBetween(clampedSlotPosition, targetLoaderPosition, closestTrainEndPosition, inclusive: true))
-            {
-                // need to move toward the far end
-                //Loader.LogDebug($"{waypoint.RefuelLoadName} slot is between loader and closest end");
-                distanceToMove = distanceFromFurthestEndOfTrainToFuelCarInclusive - distanceFromClosestFuelCarEndToSlot;
-                locationToMoveToward = furthestTrainEndLocation;
-            }
-
-            //Loader.LogDebug($"Checking if slot is in between loader and furthest end");
-            if (IsTargetBetween(clampedSlotPosition, targetLoaderPosition, furthestTrainEndPosition, inclusive: true))
-            {
-                // need to move toward the near end
-                //Loader.LogDebug($"{waypoint.RefuelLoadName} slot is between loader and furthest end");
-                distanceToMove = totalTrainLength - distanceFromFurthestEndOfTrainToFuelCarInclusive + distanceFromClosestFuelCarEndToSlot;
-                locationToMoveToward = closestTrainEndLocation;
-            }
-
-            //Loader.LogDebug($"Checking if loader is in between closest end and furthest end");
-            if (IsTargetBetween(targetLoaderPosition, closestTrainEndPosition, furthestTrainEndPosition))
-            {
-                //Loader.LogDebug($"{waypoint.RefuelLoadName} loader is between closest end and furthest end");
-                distanceToMove = -distanceToMove;
-            }
-
-            //Loader.LogDebug($"distanceToMove is {distanceToMove}");
-
-            Location orientedTargetLocation = Graph.Shared.LocationOrientedToward(targetLoaderLocation, locationToMoveToward);
-
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedTargetLocation, distanceToMove, false, true);
-
-            return locationToMove;
+            Location outward = Graph.Shared.LocationOrientedToward(leadingEnd, slotLocation).Flipped();
+            Loader.LogDebug($"Refuel: {fuelCar.Ident}'s {waypoint.RefuelLoadName} slot is {distanceToMove:0.00} m from the loader; moving the train end at {leadingEnd} that far");
+            return Graph.Shared.LocationByMoving(outward, distanceToMove, false, true);
         }
 
         private Vector3 GetFuelCarLoadSlotPosition(Car fuelCar, ManagedWaypoint waypoint, out float maxCapacity)
@@ -501,16 +467,17 @@ namespace WaypointQueue.Services
 
             (Location closestTrainEndLocation, Location furthestTrainEndLocation) = carService.GetTrainEndLocations(locomotive, targetLoaderLocation, out _, out _, out _, out _, out _);
 
-            Location orientedFurthestEnd = Graph.Shared.LocationOrientedToward(furthestTrainEndLocation, targetLoaderLocation);
+            // The far end, 10 m further out: the train backs away from the loader to come at it again.
+            Location outwardFurthestEnd = Graph.Shared.LocationOrientedToward(furthestTrainEndLocation, targetLoaderLocation).Flipped();
 
             float distanceToMoveAwayFromLoader = 10;
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedFurthestEnd, distanceToMoveAwayFromLoader);
+            Location locationToMove = Graph.Shared.LocationByMoving(outwardFurthestEnd, distanceToMoveAwayFromLoader, false, true);
 
             Loader.Log($"Sending retry refueling waypoint for {waypoint.Locomotive.Ident} to {locationToMove} to refuel {currentRefuelLoco.Ident}");
             waypoint.StatusLabel = $"Moving to refuel {waypoint.RefuelLoadName}";
             waypoint.OverwriteLocation(locationToMove);
             waypoint.StopAtWaypoint = true;
-            autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
+            autoEngineerService.SendToPosedMark(ordersHelper, locationToMove);
         }
     }
 }
