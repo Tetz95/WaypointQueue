@@ -203,9 +203,7 @@ namespace WaypointQueue.Services
             {
                 throw new RefuelException($"{fuelCar.Ident} has no {waypoint.RefuelLoadName} load slot.", waypoint);
             }
-            LoadSlot loadSlot = fuelCar.Definition.LoadSlots[loadSlotIndex];
-
-            maxCapacity = loadSlot.MaximumCapacity;
+            maxCapacity = FuelSlotCapacity(fuelCar, loadSlotIndex);
 
             List<CarLoadTarget> carLoadTargets = fuelCar.GetComponentsInChildren<CarLoadTarget>().ToList();
             CarLoadTarget loadTarget = carLoadTargets.Find(clt => clt.slotIndex == loadSlotIndex);
@@ -219,6 +217,13 @@ namespace WaypointQueue.Services
         private static int FuelSlotIndex(Car fuelCar, string refuelLoadName)
         {
             return fuelCar.Definition.LoadSlots.FindIndex(slot => Compat2026.LoadName(slot.RequiredLoadIdentifier) == refuelLoadName);
+        }
+
+        // What the slot holds when full, as the game's loader works it out (volume times density can cap coal).
+        private static float FuelSlotCapacity(Car fuelCar, int slotIndex)
+        {
+            LoadSlot slot = fuelCar.Definition.LoadSlots[slotIndex];
+            return slot.CalculateMaximumCapacity(slot.RequiredLoadIdentifier, fuelCar);
         }
 
         private Vector3 CalculatePositionFromLoadTarget(Car fuelCar, CarLoadTarget loadTarget)
@@ -368,9 +373,11 @@ namespace WaypointQueue.Services
             }
             _cachedCarLoadQuantityByFuelCarId[locomotive.id] = carLoadInfo.Value.Quantity;
 
-            LoadSlot loadSlot = fuelCar.Definition.LoadSlots[slotIndex];
+            // As the game's loader decides it: coal (pounds, with a density) can be capped by the tender's volume below the
+            // slot's authored maximum, and the loader stops there.
+            float capacity = FuelSlotCapacity(fuelCar, slotIndex);
 
-            bool isFullVanilla = carLoadInfo.Value.Quantity / loadSlot.MaximumCapacity > 0.999f;
+            bool isFullVanilla = capacity <= 0f || carLoadInfo.Value.Quantity / capacity > 0.999f;
 
             if (isFullVanilla)
             {
