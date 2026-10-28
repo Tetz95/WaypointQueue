@@ -347,7 +347,7 @@ namespace WaypointQueue.UI
 
                         if (!item[item.EndToLogical(Car.End.F)].IsCoupled)
                         {
-                            Location location2 = Graph.Shared.LocationByMoving(item.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                            Location location2 = Graph.Shared.Current.LocationByMoving(item.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
                             float distanceBetweenClose = Graph.Shared.GetDistanceBetweenClose(valueOrDefault, location2);
                             if (distanceBetweenClose < num)
                             {
@@ -358,7 +358,7 @@ namespace WaypointQueue.UI
 
                         if (!item[item.EndToLogical(Car.End.R)].IsCoupled)
                         {
-                            Location location3 = Graph.Shared.LocationByMoving(item.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
+                            Location location3 = Graph.Shared.Current.LocationByMoving(item.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
                             float distanceBetweenClose2 = Graph.Shared.GetDistanceBetweenClose(valueOrDefault, location3);
                             if (distanceBetweenClose2 < num)
                             {

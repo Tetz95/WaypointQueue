@@ -57,8 +57,9 @@ namespace WaypointQueue
                 if (exit <= 0f)
                     return;
 
-                // Keep the game's turn-back point where the longer move would run off the end of the track.
-                Graph graph = Graph.Shared;
+                // Keep the game's turn-back point where the longer move would run off the end of the track (track the
+                // engineer can use: 2026.1's Graph.Shared walks disabled and unbuilt track too, its Current doesn't).
+                IGraphView graph = Graph.Shared.Current;
                 if (!graph.DecodeSwitchAt(node, out TrackSegment enter, out _, out _))
                     return;
                 Location start = new Location(enter, 0f, enter.EndForNode(node));
@@ -92,7 +93,7 @@ namespace WaypointQueue
                     RouteSearch.Step step = ____route[i];
                     if (step.Direction != ____route[i - 1].Direction && step.Node != null && _extended.Contains(step.Node.id))
                     {
-                        if (!StillTurnsBack(__instance, baseMomentum))
+                        if (!StillTurnsBack(__instance, ____locomotive, baseMomentum))
                         {
                             Loader.LogDebug($"{____locomotive?.Ident}: the route no longer needs to turn back beyond {step.Node.id}; rebuilding it");
                             return true;
@@ -104,22 +105,23 @@ namespace WaypointQueue
                 return true;
             }
 
-            // The game's own search (as RebuildRoute runs it first), from where the train is now: does the best route still
-            // turn back anywhere? When in doubt, yes (keep the route).
-            private static bool StillTurnsBack(AutoEngineerPlanner planner, float baseMomentum)
+            // The game's own route planning (as the planner runs it: 2026.1 searches toward the pose goals of a posed
+            // waypoint, from the train's leading end), from where the train is now: does the best route still turn back
+            // anywhere? When in doubt, yes (keep the route).
+            private static bool StillTurnsBack(AutoEngineerPlanner planner, BaseLocomotive locomotive, float baseMomentum)
             {
                 try
                 {
-                    OrderWaypoint? waypoint = OrdersRef(planner).Waypoint;
-                    if (!waypoint.HasValue)
+                    global::Model.AI.Orders orders = OrdersRef(planner);
+                    OrderWaypoint? waypoint = orders.Waypoint;
+                    if (!waypoint.HasValue || locomotive == null)
                         return true;
-                    Graph graph = Graph.Shared;
-                    Location end = graph.ResolveLocationString(waypoint.Value.LocationString);
                     object[] args = { 0f };
-                    Location start = (Location)RouteStartLocation.Invoke(planner, args);
+                    RouteStartLocation.Invoke(planner, args);
                     float momentum = (float)args[0] + baseMomentum;
-                    var steps = new List<RouteSearch.Step>();
-                    if (!graph.FindRoute(start, end, HeuristicCosts.AutoEngineer, steps, out _, checkForCars: false, MaximumLength(planner), momentum))
+                    List<Car> coupled = locomotive.EnumerateCoupled().ToList();
+                    if (!AutoEngineerPlanner.TryPlanRoute(locomotive, coupled, MaximumLength(planner), orders.Forward, waypoint.Value, Graph.Shared.Current,
+                            out _, out List<RouteSearch.Step> steps, out _, out _, null, momentum) || steps == null)
                         return true;
                     for (int i = 1; i < steps.Count; i++)
                     {
@@ -176,7 +178,7 @@ namespace WaypointQueue
             if (spans.Count == 0)
                 return 0f;
 
-            Graph graph = Graph.Shared;
+            IGraphView graph = Graph.Shared.Current;
             if (!graph.DecodeSwitchAt(node, out TrackSegment enter, out _, out _))
                 return 0f;
             Location start = new Location(enter, 0f, enter.EndForNode(node));

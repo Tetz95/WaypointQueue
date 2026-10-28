@@ -192,7 +192,7 @@ namespace WaypointQueue.Services
             // Legacy's LocationOrientedToward faced away from the end (2026.1's faces toward it): LocationFacingAwayFrom.
             Location orientedTargetLocation = Graph.Shared.LocationFacingAwayFrom(targetLoaderLocation, locationToMoveToward);
 
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedTargetLocation, distanceToMove, false, true);
+            Location locationToMove = Graph.Shared.Current.LocationByMoving(orientedTargetLocation, distanceToMove, false, true);
 
             return locationToMove;
         }
@@ -526,7 +526,7 @@ namespace WaypointQueue.Services
             Location orientedFurthestEnd = Graph.Shared.LocationFacingAwayFrom(furthestTrainEndLocation, targetLoaderLocation);
 
             float distanceToMoveAwayFromLoader = 10;
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedFurthestEnd, distanceToMoveAwayFromLoader);
+            Location locationToMove = Graph.Shared.Current.LocationByMoving(orientedFurthestEnd, distanceToMoveAwayFromLoader);
 
             Loader.Log($"Sending retry refueling waypoint for {waypoint.Locomotive.Ident} to {locationToMove} to refuel {currentRefuelLoco.Ident}");
             waypoint.StatusLabel = $"Moving to refuel {waypoint.RefuelLoadName}";

@@ -71,7 +71,8 @@ namespace WaypointQueue
             public bool TryFindDistance(Location start, Location end, out float totalDistance, out float traverseTimeSeconds)
             {
                 traverseTimeSeconds = 0f;
-                return GraphRouteSearchExtension.TryFindDistance(graph, start, end, out totalDistance);
+                // Over track the engineer can use (Graph.Current; Graph.Shared itself walks disabled and unbuilt track too)
+                return GraphRouteSearchExtension.TryFindDistance(graph.Current, start, end, out totalDistance);
             }
         }
     }

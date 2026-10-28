@@ -641,7 +641,7 @@ namespace WaypointQueue
                 object[] args = { 0f };
                 Location start = (Location)PlannerRouteStart.Invoke(planner, args);
                 var steps = new List<Track.Search.RouteSearch.Step>();
-                if (!Track.Search.RouteSearch.FindRoute(Graph.Shared, start, clearPoint, Track.Search.HeuristicCosts.AutoEngineer, steps, out _,
+                if (!Track.Search.RouteSearch.FindRoute(Graph.Shared.Current, start, clearPoint, Track.Search.HeuristicCosts.AutoEngineer, steps, out _,
                         checkForCars: false, PlannerMaximumLength(planner), (float)args[0]))
                 {
                     return false;
@@ -750,7 +750,7 @@ namespace WaypointQueue
             Location orientedLocation = approachFrom.HasValue
                 ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
                 : Graph.Shared.LocationFacingAwayFrom(waypoint.Location, furthestCarLocation);
-            Location location = Graph.Shared.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
+            Location location = Graph.Shared.Current.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
             location.AssertValid();
             return location;
         }

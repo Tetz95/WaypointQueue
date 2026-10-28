@@ -40,7 +40,7 @@ namespace WaypointQueue.Services
                 try
                 {
                     Loader.LogDebug($"Checking for coupling ahead by moving {totalDistanceChecked}");
-                    Location checkLocation = Graph.Shared.LocationByMoving(orientedClosestTrainEnd, totalDistanceChecked, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                    Location checkLocation = Graph.Shared.Current.LocationByMoving(orientedClosestTrainEnd, totalDistanceChecked, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
                     targetCar = trainControllerWrapper.CheckForCarAtLocation(checkLocation);
                     if (targetCar != null && !consist.Contains(targetCar))
                     {
@@ -126,7 +126,7 @@ namespace WaypointQueue.Services
 
                 // Facing away from the waypoint: half a metre back puts the mark short of the coupler, on the train's side.
                 Location orientedTargetLocation = Graph.Shared.LocationFacingAwayFrom(bestMatchLocation, wp.Location);
-                Location adjustedLocation = Graph.Shared.LocationByMoving(orientedTargetLocation, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                Location adjustedLocation = Graph.Shared.Current.LocationByMoving(orientedTargetLocation, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
                 wp.OverwriteLocation(adjustedLocation);
 
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
@@ -192,11 +192,11 @@ namespace WaypointQueue.Services
             End carEnd = car.LogicalToEnd(logicalEnd);
             if (carEnd == End.F)
             {
-                return Graph.Shared.LocationByMoving(car.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                return Graph.Shared.Current.LocationByMoving(car.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
             }
             else
             {
-                return Graph.Shared.LocationByMoving(car.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
+                return Graph.Shared.Current.LocationByMoving(car.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
             }
         }
     }
