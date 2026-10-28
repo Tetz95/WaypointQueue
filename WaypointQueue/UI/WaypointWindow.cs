@@ -1559,7 +1559,7 @@ if (waypoint.WillRefuel)
                     {
                         waypoint.RefuelingSpeedLimit += GetOffsetAmount();
                         onWaypointChange(waypoint);
-                    }).Width(24f).Disable(waypoint.RefuelingSpeedLimit >= 45);
+                    }).Width(24f).Disable(waypoint.RefuelingSpeedLimit >= global::Model.AI.AutoEngineerOrdersExtensions.MaxSpeedMph(Game.Messages.AutoEngineerMode.Waypoint));
                 }));
 
                 AddLabelOnlyTooltip(refuelSpeedLimitField, "Refuel speed limit", "The engineer will temporarily be restricted to this speed limit while repositioning the locomotive to refuel." +

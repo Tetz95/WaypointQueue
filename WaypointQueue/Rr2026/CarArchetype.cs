@@ -8,6 +8,8 @@ namespace Model
         LocomotiveSteam,
         LocomotiveDiesel,
         Tender,
+        // Any other locomotive type (CarType.IsLocomotive: an "L" type that isn't a tender)
+        LocomotiveOther,
     }
 
     public static class CarArchetypeCompat
@@ -18,10 +20,11 @@ namespace Model
                 car.CarType.IsLocomotiveSteam ? CarArchetype.LocomotiveSteam
                 : car.CarType.IsLocomotiveDiesel ? CarArchetype.LocomotiveDiesel
                 : car.CarType.IsTender ? CarArchetype.Tender
+                : car.CarType.IsLocomotive ? CarArchetype.LocomotiveOther
                 : CarArchetype.Other;
         }
 
         public static bool IsLocomotive(this CarArchetype archetype) =>
-            archetype == CarArchetype.LocomotiveSteam || archetype == CarArchetype.LocomotiveDiesel;
+            archetype == CarArchetype.LocomotiveSteam || archetype == CarArchetype.LocomotiveDiesel || archetype == CarArchetype.LocomotiveOther;
     }
 }

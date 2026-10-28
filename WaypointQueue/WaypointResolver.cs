@@ -272,7 +272,8 @@ namespace WaypointQueue
         private void ResolveChangeMaxSpeed(ManagedWaypoint wp)
         {
             var ordersHelper = autoEngineerService.GetOrdersHelper(wp.Locomotive);
-            int maxSpeedToSet = Mathf.Clamp(wp.MaxSpeedForChange, 0, 45);
+            // The railroad's speed limit (2026.1 lets the player set it, 5-100 mph; Legacy's was 45)
+            int maxSpeedToSet = Mathf.Clamp(wp.MaxSpeedForChange, 0, global::Model.AI.AutoEngineerOrdersExtensions.MaxSpeedMph(Game.Messages.AutoEngineerMode.Waypoint));
             ordersHelper.SetOrdersValue(null, null, maxSpeedMph: maxSpeedToSet, null, null);
         }
 

@@ -243,7 +243,7 @@ namespace WaypointQueue.Services
 
         public bool IsCarLocomotiveType(Car car)
         {
-            return car.Archetype == CarArchetype.LocomotiveDiesel || car.Archetype == CarArchetype.LocomotiveSteam || car.Archetype == CarArchetype.Tender;
+            return car.Archetype.IsLocomotive() || car.Archetype == CarArchetype.Tender;
         }
 
         private static readonly PropertyInfo IsMuEnabledProperty = AccessTools.Property(typeof(BaseLocomotive), "IsMuEnabled");

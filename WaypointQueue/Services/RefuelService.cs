@@ -298,7 +298,8 @@ namespace WaypointQueue.Services
             {
                 return ["diesel-fuel"];
             }
-            return null;
+            // Other locomotive types (and other cars) take nothing WPQ knows how to refuel
+            return [];
         }
 
         public void CheckNearbyFuelLoaders(ManagedWaypoint waypoint)
