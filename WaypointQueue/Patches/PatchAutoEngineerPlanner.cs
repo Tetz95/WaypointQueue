@@ -40,6 +40,25 @@ namespace WaypointQueue
                 __result = WaypointArrival.Arrived;
         }
 
+        // Per waypoint: whether the route to the waypoint after it runs over it (worked out once).
+        private static readonly Dictionary<string, bool> _nextRouteRunsOver = new Dictionary<string, bool>();
+
+        private static bool NextRouteRunsOver(BaseLocomotive locomotive, ManagedWaypoint managed)
+        {
+            if (_nextRouteRunsOver.TryGetValue(managed.Id, out bool known))
+                return known;
+            LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(locomotive.id);
+            int index = state.Waypoints.FindIndex(w => w.Id == managed.Id);
+            if (index < 0 || index + 1 >= state.Waypoints.Count)
+                return false;
+            bool runsOver = WaypointResolver.RouteRunsOverWaypoint(managed, state.Waypoints[index + 1].Location);
+            if (_nextRouteRunsOver.Count > 200)
+                _nextRouteRunsOver.Clear();
+            _nextRouteRunsOver[managed.Id] = runsOver;
+            Loader.LogDebug($"{locomotive.Ident}: non-stop waypoint {managed.Id}: next waypoint's route {(runsOver ? "runs over it; handing over early" : "doesn't run over it")}");
+            return runsOver;
+        }
+
         private static void IsWaypointSatisfiedPostfix(
             ref bool __result,
             BaseLocomotive ____locomotive,
@@ -62,8 +81,12 @@ namespace WaypointQueue
                 if (managed.StopAtWaypoint || managed.WaypointTargetSpeed <= 0)
                     return;
 
+                // Below 35 mph only a waypoint the next one's route runs over: 2026.1's engineer brakes for the end of its
+                // route, which is this waypoint, so a non-stop waypoint was passed at a crawl (4 mph for a 10 mph target)
+                // unless the next waypoint goes out before the braking starts. Its route running over this waypoint's
+                // track means the train still gets there, whichever way it goes on.
                 float speedMph = ____locomotive.VelocityMphAbs;
-                if (speedMph < HighSpeedMphThreshold)
+                if (speedMph < HighSpeedMphThreshold && !NextRouteRunsOver(____locomotive, managed))
                     return;
 
                 if (!____routeTargetLocation.HasValue || ____graph == null)

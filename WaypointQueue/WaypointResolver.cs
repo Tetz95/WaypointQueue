@@ -624,7 +624,7 @@ namespace WaypointQueue
 
         // The game's own route search (as the auto engineer will run it) from where the train is now to the point past the
         // waypoint: does it run over the waypoint's track segment? When in doubt, no (send past on arrival).
-        private static bool RouteRunsOverWaypoint(ManagedWaypoint wp, Location clearPoint)
+        internal static bool RouteRunsOverWaypoint(ManagedWaypoint wp, Location clearPoint)
         {
             try
             {
