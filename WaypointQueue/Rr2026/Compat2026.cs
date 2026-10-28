@@ -47,8 +47,11 @@ namespace WaypointQueue
         // game's "rr/", so waypoints saved by Legacy still match.
         extension(Load load)
         {
-            public string name => load.id != null && load.id.StartsWith("rr/") ? load.id.Substring(3) : load.id;
+            public string name => LoadName(load.id);
         }
+
+        // A load id ("rr/water", as in a load slot's RequiredLoadIdentifier) in that same form ("water").
+        public static string LoadName(string id) => id != null && id.StartsWith("rr/") ? id.Substring(3) : id;
 
         extension(CarLoadTargetLoader loader)
         {

@@ -118,7 +118,7 @@ namespace WaypointQueue.Services
         {
             Car fuelCar = GetFuelCar(locomotive);
 
-            Vector3 loadSlotPosition = GetFuelCarLoadSlotPosition(fuelCar, waypoint.RefuelLoadName, out float slotMaxCapacity);
+            Vector3 loadSlotPosition = GetFuelCarLoadSlotPosition(fuelCar, waypoint, out float slotMaxCapacity);
             waypoint.RefuelMaxCapacity = slotMaxCapacity;
 
             if (!Graph.Shared.TryGetLocationFromGamePoint(waypoint.RefuelPoint, 10f, out Location targetLoaderLocation))
@@ -196,13 +196,16 @@ namespace WaypointQueue.Services
             return locationToMove;
         }
 
-        private Vector3 GetFuelCarLoadSlotPosition(Car fuelCar, string refuelLoadName, out float maxCapacity)
+        private Vector3 GetFuelCarLoadSlotPosition(Car fuelCar, ManagedWaypoint waypoint, out float maxCapacity)
         {
-            LoadSlot loadSlot = fuelCar.Definition.LoadSlots.Find(slot => slot.RequiredLoadIdentifier == refuelLoadName);
+            int loadSlotIndex = FuelSlotIndex(fuelCar, waypoint.RefuelLoadName);
+            if (loadSlotIndex < 0)
+            {
+                throw new RefuelException($"{fuelCar.Ident} has no {waypoint.RefuelLoadName} load slot.", waypoint);
+            }
+            LoadSlot loadSlot = fuelCar.Definition.LoadSlots[loadSlotIndex];
 
             maxCapacity = loadSlot.MaximumCapacity;
-
-            int loadSlotIndex = fuelCar.Definition.LoadSlots.IndexOf(loadSlot);
 
             List<CarLoadTarget> carLoadTargets = fuelCar.GetComponentsInChildren<CarLoadTarget>().ToList();
             CarLoadTarget loadTarget = carLoadTargets.Find(clt => clt.slotIndex == loadSlotIndex);
@@ -210,6 +213,12 @@ namespace WaypointQueue.Services
             Vector3 loadSlotPosition = CalculatePositionFromLoadTarget(fuelCar, loadTarget);
 
             return loadSlotPosition;
+        }
+
+        // The fuel car's slot for a refuel load name ("water"); 2026.1 slots name the load by id ("rr/water"). -1 if none.
+        private static int FuelSlotIndex(Car fuelCar, string refuelLoadName)
+        {
+            return fuelCar.Definition.LoadSlots.FindIndex(slot => Compat2026.LoadName(slot.RequiredLoadIdentifier) == refuelLoadName);
         }
 
         private Vector3 CalculatePositionFromLoadTarget(Car fuelCar, CarLoadTarget loadTarget)
@@ -343,7 +352,8 @@ namespace WaypointQueue.Services
         public bool IsLocoFull(BaseLocomotive locomotive, string refuelLoadName, float refuelMaxCapacity, out bool isIncreasing)
         {
             Car fuelCar = GetFuelCar(locomotive);
-            CarLoadInfo? carLoadInfo = fuelCar.GetLoadInfo(refuelLoadName, out int slotIndex);
+            int slotIndex = FuelSlotIndex(fuelCar, refuelLoadName);
+            CarLoadInfo? carLoadInfo = slotIndex < 0 ? null : fuelCar.GetLoadInfo(slotIndex);
             isIncreasing = false;
 
             if (!carLoadInfo.HasValue)
