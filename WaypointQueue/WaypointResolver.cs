@@ -333,6 +333,7 @@ namespace WaypointQueue
             // After reaching the reposition waypoint, begin refueling with animations
             if (wp.CurrentlyRefueling && !wp.RefuelLoaderAnimated && Mathf.Floor(wp.Locomotive.VelocityMphAbs) == 0)
             {
+                refuelService.LogSlotAlignment(wp);
                 refuelService.SetCarLoaderSequencerWantsLoading(wp, true);
                 wp.RefuelLoaderAnimated = true;
                 wp.StatusLabel = $"Refueling {wp.RefuelLoadName}";

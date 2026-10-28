@@ -179,6 +179,26 @@ namespace WaypointQueue.Services
             return loadSlotPosition;
         }
 
+        // Where the slot stopped relative to the loader, for the log: the loader fills only a slot within its radius.
+        public void LogSlotAlignment(ManagedWaypoint waypoint)
+        {
+            try
+            {
+                BaseLocomotive loco = waypoint.RefuelLocoIdsQueue.Count > 0 ? carService.GetLocoById(waypoint.RefuelLocoIdsQueue.First()) : waypoint.Locomotive;
+                Car fuelCar = GetFuelCar(loco);
+                Vector3 slot = GetFuelCarLoadSlotPosition(fuelCar, waypoint, out _);
+                Graph.Shared.TryGetLocationFromGamePoint(waypoint.RefuelPoint, 10f, out Location loader);
+                Graph.Shared.TryGetLocationFromGamePoint(slot, 10f, out Location slotLocation);
+                float along = loader.IsValid && slotLocation.IsValid ? Graph.Shared.GetDistanceBetweenClose(slotLocation, loader) : -1f;
+                (Location closest, Location furthest) = carService.GetTrainEndLocations(loco, loader, out _, out _, out _, out _, out _);
+                Loader.Log($"Refuel: {fuelCar.Ident} stopped with its {waypoint.RefuelLoadName} slot {Vector3.Distance(slot.ZeroY(), waypoint.RefuelPoint.ZeroY()):0.00} m from the loader ({along:0.00} m along the track); train ends {closest} (nearest the loader) and {furthest}");
+            }
+            catch (Exception e)
+            {
+                Loader.Log($"Refuel: couldn't measure the slot's alignment: {e.Message}");
+            }
+        }
+
         // The fuel car's slot for a refuel load name ("water"); 2026.1 slots name the load by id ("rr/water"). -1 if none.
         private static int FuelSlotIndex(Car fuelCar, string refuelLoadName)
         {
