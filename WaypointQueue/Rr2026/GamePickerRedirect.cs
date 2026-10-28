@@ -54,6 +54,38 @@ namespace WaypointQueue.UI
             return true;
         }
 
+        // Whether the pick being made goes into the queue (appended, inserted, or handed to a WPQ move or insert) rather
+        // than becoming the locomotive's order at once.
+        private static bool IsQueueingPick()
+        {
+            if (_pending != null)
+            {
+                return true;
+            }
+            var settings = Loader.Settings;
+            if (UnityEngine.Input.GetKey(settings.queuedWaypointModeKey.keyCode) || UnityEngine.Input.GetKey(settings.insertNextWaypointModeKey.keyCode))
+            {
+                return true;
+            }
+            return settings.MakeAppendDefaultWithoutHotkeybinding && !UnityEngine.Input.GetKey(settings.replaceWaypointModeKey.keyCode);
+        }
+
+        // 2026.1's picker only commits a mark the train can be placed at and routed to from where it stands now. A
+        // queued waypoint is driven later, often after the train has changed (a set-out shortens it, an earlier
+        // waypoint lines a switch), so a queued pick is let through; its pose is planned again when it is sent
+        // (QueuedPose.ToOrder), and the engineer reports then if it still can't get there.
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(AutoEngineerDestinationPicker), "TryDerivePlacementForCommit")]
+        private static void TryDerivePlacementForCommitPostfix(ref bool __result, ref string refusal)
+        {
+            if (!__result && IsQueueingPick())
+            {
+                Loader.LogDebug($"Picker would refuse a queued waypoint ({refusal}); letting it through");
+                __result = true;
+                refusal = null;
+            }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(AutoEngineerDestinationPicker), "OnCancelled")]
         private static void OnCancelledPostfix()
