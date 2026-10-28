@@ -88,7 +88,7 @@ namespace WaypointQueue.Services
 
         public void OrderLocomotiveToRefuel(BaseLocomotive locoForRefuel, ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper)
         {
-            Location locationToMove = GetRefuelLocation(locoForRefuel, waypoint);
+            Location locationToMove = BeyondArrivalShortfall(waypoint.Locomotive, GetRefuelLocation(locoForRefuel, waypoint));
             _cachedCarLoadQuantityByFuelCarId.Remove(locoForRefuel.id);
 
             Loader.Log($"Sending refueling waypoint for {waypoint.Locomotive.Ident} to {locationToMove} to refuel {locoForRefuel.Ident}");
@@ -97,6 +97,18 @@ namespace WaypointQueue.Services
             waypoint.StopAtWaypoint = true;
             WaypointQueueController.Shared.UpdateWaypoint(waypoint);
             autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
+        }
+
+        // The engineer counts a waypoint reached once it lies within a metre of the train (AutoEngineerPlanner.IsUnderTrain)
+        // and stops there: the train's end came to rest about 0.7 m short of a refuel mark (0.65-0.77 m in four stops),
+        // outside a small tender's fill radius. The mark goes that much further out, away from the train.
+        private const float ArrivalShortfall = 0.7f;
+
+        private Location BeyondArrivalShortfall(BaseLocomotive locomotive, Location mark)
+        {
+            (_, Location furthestTrainEnd) = carService.GetTrainEndLocations(locomotive, mark, out _, out _, out _, out _, out _);
+            Location outward = Graph.Shared.LocationFacingAwayFrom(mark, furthestTrainEnd);
+            return Graph.Shared.Current.LocationByMoving(outward, ArrivalShortfall, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
         }
 
         private List<BaseLocomotive> GetCoupledLocosForRefuel(BaseLocomotive locomotive, string refuelLoadName, Location location)
