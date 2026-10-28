@@ -652,8 +652,27 @@ namespace WaypointQueue
                 waypoint.StopAtWaypoint = true;
                 waypoint.MoveTrainPastWaypoint = false;
             }
-            Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
-            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
+            // A waypoint on a car goes out as the game's coupling order to the car's nearer end (the train placed against
+            // that coupler), as the picker made it: 2026.1's planner doesn't route a plain waypoint that only names the car
+            // (it kept rebuilding "not on current route" and never set off). A pose the player picked is sent as picked.
+            if (!string.IsNullOrEmpty(waypoint.CoupleToCarId) && (pose == null || !pose.IsPosed) && waypoint.TryResolveCoupleToCar(out Car coupleToCar))
+            {
+                Car.LogicalEnd end = _carService.ClosestLogicalEndTo(coupleToCar, waypoint.Location);
+                Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to couple to {coupleToCar.Ident} (end {end})");
+                _autoEngineerService.SendToCouple(ordersHelper, waypoint.Location, coupleToCar, end);
+                // The order marks the coupler where the car stands now; keep the waypoint on it, or the "first waypoint
+                // adjusted" check (ModStateManager) would see a different mark and send it again on every update.
+                string sent = ordersHelper.Orders.Waypoint?.LocationString;
+                if (sent != null && !AutoEngineerService.SameMark(sent, waypoint.LocationString))
+                {
+                    waypoint.OverwriteLocation(Graph.Shared.ResolveLocationString(sent));
+                }
+            }
+            else
+            {
+                Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
+                _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
+            }
 
             _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
 
