@@ -24,18 +24,6 @@ namespace WaypointQueue.Services
             ordersHelper.SetOrdersValue(null, null, null, null, maybeWaypoint);
         }
 
-        // Sends the train to stop with its end at the mark and the rest of it behind (the mark faces outward from the train,
-        // as the game's own coupling marks do). 2026.1 counts a plain waypoint reached as soon as it lies under the train;
-        // a posed one places the train exactly, so a short shuffle (lining a fuel slot up with a loader) happens.
-        public void SendToPosedMark(AutoEngineerOrdersHelper ordersHelper, Location mark)
-        {
-            var locomotive = (BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value;
-            Location inside = InsideSegment(mark);
-            Track.Search.BodyToward body = Track.Search.WaypointPose.ToBodyToward(inside.end.Flipped());
-            OrderWaypoint waypoint = global::Model.AI.Waypoints.PosedWaypoint.Order(locomotive, Graph.Shared, inside, WaypointEnd.Nearest, body);
-            ordersHelper.SetOrdersValue(null, null, null, null, waypoint);
-        }
-
         // The order keeps its waypoint as text with the distance rounded to 1 mm, so a waypoint on the very end of a
         // segment could round past it (47.088 on a 47.08782 m segment): the game then failed to route there on every
         // try and the train never set off. A centimetre inside the segment survives the rounding.
