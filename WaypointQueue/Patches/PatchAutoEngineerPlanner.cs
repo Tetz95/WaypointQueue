@@ -47,7 +47,7 @@ namespace WaypointQueue
                     return;
                 }
 
-                if (waypointState.UnresolvedWaypoint?.LocationString != ordersHelper.Orders.Waypoint?.LocationString)
+                if (!AutoEngineerService.SameMark(waypointState.UnresolvedWaypoint?.LocationString, ordersHelper.Orders.Waypoint?.LocationString))
                 {
                     Loader.LogDebug($"Loco {loco.Ident} unresolved waypoint to {waypointState.UnresolvedWaypoint?.LocationString} did not match {ordersHelper.Orders.Waypoint?.LocationString}");
                 }

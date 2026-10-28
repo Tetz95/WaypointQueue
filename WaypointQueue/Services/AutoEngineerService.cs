@@ -41,6 +41,37 @@ namespace WaypointQueue.Services
         // try and the train never set off. A centimetre inside the segment survives the rounding.
         private const float SegmentEndMargin = 0.01f;
 
+        // Whether two waypoint location strings name the same mark. The order carries the mark moved up to a centimetre
+        // inside its segment (InsideSegment) while the queue keeps it as placed, so they are compared as track
+        // positions, not as text.
+        internal static bool SameMark(string a, string b)
+        {
+            if (a == b)
+            {
+                return true;
+            }
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+            {
+                return false;
+            }
+            try
+            {
+                Location la = Graph.Shared.ResolveLocationString(a).Clamped();
+                Location lb = Graph.Shared.ResolveLocationString(b).Clamped();
+                if (la.segment == null || la.segment != lb.segment)
+                {
+                    return false;
+                }
+                float da = la.end == TrackSegment.End.A ? la.distance : la.segment.GetLength() - la.distance;
+                float db = lb.end == TrackSegment.End.A ? lb.distance : lb.segment.GetLength() - lb.distance;
+                return Math.Abs(da - db) <= 2f * SegmentEndMargin + 0.001f;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         internal static Location InsideSegment(Location location)
         {
             Location clamped = location.Clamped();

@@ -517,7 +517,7 @@ namespace WaypointQueue.State
                 string oldCoupleId = oldOrdersCoupleToCarId ?? "";
                 string newCoupleId = newState.UnresolvedWaypoint.CoupleToCarId ?? "";
 
-                if (oldLocString != newLocString || oldCoupleId != newCoupleId)
+                if (!AutoEngineerService.SameMark(oldLocString, newLocString) || oldCoupleId != newCoupleId)
                 {
                     WaypointQueueController.Shared.SendToFirstWaypoint(newState);
                     return;
