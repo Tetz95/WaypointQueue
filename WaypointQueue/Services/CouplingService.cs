@@ -25,7 +25,8 @@ namespace WaypointQueue.Services
         {
             Loader.LogDebug($"Starting search for nearby coupling in straight line");
             (Location closestTrainEndLocation, Location furthestTrainEndLocation) = carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out float closestDistance, out Car closestCar, out Car furthestCar, out _, out _);
-            Location orientedClosestTrainEnd = Graph.Shared.LocationOrientedToward(closestTrainEndLocation, furthestTrainEndLocation);
+            // Facing out of the train at its end nearest the waypoint: the search runs ahead of the train.
+            Location orientedClosestTrainEnd = Graph.Shared.LocationFacingAwayFrom(closestTrainEndLocation, furthestTrainEndLocation);
 
             float checkDistanceInterval = AverageCarLengthMeters / 2;
             float totalDistanceChecked = 0;
@@ -123,7 +124,8 @@ namespace WaypointQueue.Services
                 wp.CurrentlyCouplingNearby = true;
                 wp.StatusLabel = "Moving to couple nearby";
 
-                Location orientedTargetLocation = Graph.Shared.LocationOrientedToward(bestMatchLocation, wp.Location);
+                // Facing away from the waypoint: half a metre back puts the mark short of the coupler, on the train's side.
+                Location orientedTargetLocation = Graph.Shared.LocationFacingAwayFrom(bestMatchLocation, wp.Location);
                 Location adjustedLocation = Graph.Shared.LocationByMoving(orientedTargetLocation, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
                 wp.OverwriteLocation(adjustedLocation);
 

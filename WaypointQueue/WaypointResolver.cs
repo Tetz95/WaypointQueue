@@ -748,7 +748,7 @@ namespace WaypointQueue
             float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
             Location orientedLocation = approachFrom.HasValue
                 ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
-                : Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
+                : Graph.Shared.LocationFacingAwayFrom(waypoint.Location, furthestCarLocation);
             Location location = Graph.Shared.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
             location.AssertValid();
             return location;

@@ -58,9 +58,16 @@ namespace WaypointQueue
             public Industry sourceIndustry => Traverse.Create(loader).Property<Industry>("sourceIndustry").Value;
         }
 
-        // The route search no longer reports a traverse time.
         extension(Graph graph)
         {
+            // Legacy's LocationOrientedToward returned the location facing AWAY from the other one (moving forward
+            // leaves it behind); 2026.1's faces toward it. Code written for Legacy uses this instead.
+            public Location LocationFacingAwayFrom(Location location, Location from)
+            {
+                return graph.LocationOrientedToward(location, from).Flipped();
+            }
+
+            // The route search no longer reports a traverse time.
             public bool TryFindDistance(Location start, Location end, out float totalDistance, out float traverseTimeSeconds)
             {
                 traverseTimeSeconds = 0f;
