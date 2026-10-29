@@ -1,6 +1,5 @@
 ﻿using Game.Events;
 using Game.State;
-using Game.Events;
 using HarmonyLib;
 using Helpers;
 using Model;
