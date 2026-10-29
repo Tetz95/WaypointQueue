@@ -39,7 +39,7 @@
 
   <!-- The game's assemblies, never copied. -->
   <ItemGroup>
-    <GameReference Include="Railroader;Railroader.Modding;KeyValue.Runtime;Newtonsoft.Json;UnityEngine;UnityEngine.CoreModule;UnityEngine.IMGUIModule;UnityEngine.InputModule;UnityEngine.JSONSerializeModule;UnityEngine.PhysicsModule;UnityEngine.UI;UnityEngine.UIModule;UnityEngine.ImageConversionModule;UnityEngine.InputLegacyModule;Unity.InputSystem;Unity.RenderPipelines.Universal.Runtime;Unity.TextMeshPro" />
+    <GameReference Include="Railroader;Railroader.Modding;KeyValue.Runtime;Newtonsoft.Json;UnityEngine;UnityEngine.CoreModule;UnityEngine.IMGUIModule;UnityEngine.InputModule;UnityEngine.JSONSerializeModule;UnityEngine.PhysicsModule;UnityEngine.UI;UnityEngine.UIModule;UnityEngine.ImageConversionModule;UnityEngine.InputLegacyModule;UnityEngine.TextRenderingModule;Unity.InputSystem;Unity.RenderPipelines.Universal.Runtime;Unity.TextMeshPro" />
     <Reference Include="@(GameReference)">
       <HintPath>$(RrManagedDir)\%(Identity).dll</HintPath>
       <Private>False</Private>

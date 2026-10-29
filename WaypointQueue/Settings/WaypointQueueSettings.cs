@@ -99,6 +99,12 @@ namespace WaypointQueue.Settings
 
         public bool UseLegacyHotkeyOptions = false;
 
+        // Turn back clear of CTC interlockings
+        // Under CTC, a route that reverses beyond an interlocking's switch runs the whole train out of the plant before
+        // reversing, so the dispatcher can line the switch for the reverse move. Otherwise the train turns back with its
+        // rear in the plant and waits there.
+        public bool ReverseClearOfInterlockings = true;
+
         public static WaypointQueueSettings Load()
         {
             WaypointQueueSettings settings = null;

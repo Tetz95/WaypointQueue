@@ -17,6 +17,7 @@ namespace WaypointQueue.Tests
         private Area SylvaArea = new();
         private Area WhittierArea = new();
         private Area BrysonArea = new();
+        private Area DillsboroArea = new();
 
         public UncouplingServiceTest()
         {
@@ -39,10 +40,16 @@ namespace WaypointQueue.Tests
             {
                 identifier = "Bryson"
             };
+            // No car in the mocked consists is bound for Dillsboro
+            DillsboroArea = new Area()
+            {
+                identifier = "Dillsboro"
+            };
 
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Sylva", out SylvaArea)).Returns(true);
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Whittier", out WhittierArea)).Returns(true);
             _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Bryson", out BrysonArea)).Returns(true);
+            _opsControllerWrapperMock.Setup(m => m.TryGetAreaById("Dillsboro", out DillsboroArea)).Returns(true);
         }
 
         [Fact]
@@ -52,9 +59,9 @@ namespace WaypointQueue.Tests
             List<Car> consistFromEndA = GenerateConsist();
             List<Car> carsToCut =
             [
-                GenerateMockCar(0).Object,
-                GenerateMockCar(1).Object,
-                GenerateMockCar(2).Object,
+                GenerateMockCar(0),
+                GenerateMockCar(1),
+                GenerateMockCar(2),
             ];
 
             var (carToUncouple, endToUncouple) = _sut.FindCarToUncouple(carsToCut, consistFromEndA);
@@ -70,9 +77,9 @@ namespace WaypointQueue.Tests
             List<Car> consistFromEndA = GenerateConsist();
             List<Car> carsToCut =
             [
-                GenerateMockCar(7).Object,
-                GenerateMockCar(8).Object,
-                GenerateMockCar(9).Object,
+                GenerateMockCar(7),
+                GenerateMockCar(8),
+                GenerateMockCar(9),
             ];
 
             var (carToUncouple, endToUncouple) = _sut.FindCarToUncouple(carsToCut, consistFromEndA);
@@ -88,10 +95,10 @@ namespace WaypointQueue.Tests
             List<Car> consistFromEndA = GenerateConsist();
             List<Car> carsToCut =
             [
-                GenerateMockCar(9).Object,
-                GenerateMockCar(8).Object,
-                GenerateMockCar(7).Object,
-                GenerateMockCar(6).Object,
+                GenerateMockCar(9),
+                GenerateMockCar(8),
+                GenerateMockCar(7),
+                GenerateMockCar(6),
             ];
 
 
@@ -107,8 +114,8 @@ namespace WaypointQueue.Tests
             List<Car> consistFromEndA = GenerateConsist();
             List<Car> carsToCut =
             [
-                GenerateMockCar(15).Object,
-                GenerateMockCar(16).Object,
+                GenerateMockCar(15),
+                GenerateMockCar(16),
             ];
 
             Assert.Throws<InvalidOperationException>(() => _sut.FindCarToUncouple(carsToCut, consistFromEndA));
@@ -194,6 +201,9 @@ namespace WaypointQueue.Tests
         [InlineData("Bryson", true, false, 0, null, null)]
         [InlineData("Bryson", false, true, 6, "0", "5")]
         [InlineData("Bryson", false, false, 1, "10", "10")]
+        [InlineData("Dillsboro", true, true, 0, null, null)]
+        [InlineData("Dillsboro", false, true, 0, null, null)]
+        [InlineData("Dillsboro", false, false, 0, null, null)]
         public void FindCutByDestinationArea(string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedConsist(out Car locomotive, out var _);
@@ -238,6 +248,8 @@ namespace WaypointQueue.Tests
         [InlineData(5, "Sylva", true, false, 2, "0", "1")]
         [InlineData(5, "Sylva", false, true, 0, null, null)]
         [InlineData(5, "Sylva", false, false, 0, null, null)]
+        [InlineData(5, "Dillsboro", false, true, 6, "0", "5")]
+        [InlineData(5, "Dillsboro", false, false, 6, "0", "5")]
         public void FindPickupByDestinationArea(int indexOfCoupled, string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedPostCoupleConsist(out Car locomotive, out List<Car> consist);
@@ -285,6 +297,8 @@ namespace WaypointQueue.Tests
         [InlineData(5, "Sylva", true, false, 10, "0", "9")]
         [InlineData(5, "Sylva", false, true, 7, "0", "6")]
         [InlineData(5, "Sylva", false, false, 11, "0", "10")]
+        [InlineData(5, "Dillsboro", false, true, 0, null, null)]
+        [InlineData(5, "Dillsboro", false, false, 0, null, null)]
         public void FindDropoffByDestinationArea(int indexOfCoupled, string areaName, bool excludeMatchFromCut, bool closestBlock, int expectedCount, string expectedFirstId, string expectedLastId)
         {
             SetupMockedPostCoupleConsist(out Car locomotive, out List<Car> consist);
@@ -330,22 +344,22 @@ namespace WaypointQueue.Tests
             var locoMock3 = GenerateMockCar(12, isLoco: true);
             List<Car> consist =
             [
-                locoMock.Object,
-                GenerateMockCar(1, SylvaArea).Object,
-                GenerateMockCar(2, WhittierArea).Object,
-                GenerateMockCar(3, BrysonArea).Object,
-                GenerateMockCar(4, BrysonArea).Object,
-                GenerateMockCar(5, WhittierArea).Object,
-                GenerateMockCar(6, SylvaArea).Object,
-                locoMock2.Object,
-                GenerateMockCar(8, BrysonArea).Object,
-                GenerateMockCar(9, WhittierArea).Object,
-                GenerateMockCar(10, SylvaArea).Object,
-                GenerateMockCar(11, BrysonArea).Object,
-                locoMock3.Object
+                locoMock,
+                GenerateMockCar(1, SylvaArea),
+                GenerateMockCar(2, WhittierArea),
+                GenerateMockCar(3, BrysonArea),
+                GenerateMockCar(4, BrysonArea),
+                GenerateMockCar(5, WhittierArea),
+                GenerateMockCar(6, SylvaArea),
+                locoMock2,
+                GenerateMockCar(8, BrysonArea),
+                GenerateMockCar(9, WhittierArea),
+                GenerateMockCar(10, SylvaArea),
+                GenerateMockCar(11, BrysonArea),
+                locoMock3
             ];
 
-            var mockedWaypoint = GenerateMockWaypoint(locoMock3.Object);
+            var mockedWaypoint = GenerateMockWaypoint(locoMock3);
 
             mockedWaypoint.Setup(w => w.CountUncoupledFromNearestToWaypoint).Returns(true);
 
@@ -369,31 +383,33 @@ namespace WaypointQueue.Tests
         }
 
         [Theory]
-        [InlineData(4, 7, "0", "6")]
-        [InlineData(9, 12, "0", "11")]
-        public void FindDropoffAllExceptLocomotives(int indexOfCoupled, int expectedCount, string expectedFirstId, string expectedLastId)
+        [InlineData(4, 7, "0", "6", true)]
+        [InlineData(9, 12, "0", "11", true)]
+        // Locomotive 7 hauled dead, in tow: it's dropped with the cars, up to the working locomotive 12
+        [InlineData(4, 12, "0", "11", false)]
+        public void FindDropoffAllExceptLocomotives(int indexOfCoupled, int expectedCount, string expectedFirstId, string expectedLastId, bool loco7Working)
         {
             var locoMock = GenerateMockCar(7, isLoco: true);
             var locoMock2 = GenerateMockCar(12, isLoco: true);
 
             List<Car> consist =
             [
-                GenerateMockCar(0, SylvaArea).Object,
-                GenerateMockCar(1, SylvaArea).Object,
-                GenerateMockCar(2, WhittierArea).Object,
-                GenerateMockCar(3, BrysonArea).Object,
-                GenerateMockCar(4, BrysonArea).Object,
-                GenerateMockCar(5, WhittierArea).Object,
-                GenerateMockCar(6, SylvaArea).Object,
-                locoMock.Object,
-                GenerateMockCar(8, BrysonArea).Object,
-                GenerateMockCar(9, WhittierArea).Object,
-                GenerateMockCar(10, SylvaArea).Object,
-                GenerateMockCar(11, BrysonArea).Object,
-                locoMock2.Object
+                GenerateMockCar(0, SylvaArea),
+                GenerateMockCar(1, SylvaArea),
+                GenerateMockCar(2, WhittierArea),
+                GenerateMockCar(3, BrysonArea),
+                GenerateMockCar(4, BrysonArea),
+                GenerateMockCar(5, WhittierArea),
+                GenerateMockCar(6, SylvaArea),
+                locoMock,
+                GenerateMockCar(8, BrysonArea),
+                GenerateMockCar(9, WhittierArea),
+                GenerateMockCar(10, SylvaArea),
+                GenerateMockCar(11, BrysonArea),
+                locoMock2
             ];
 
-            var mockedWaypoint = GenerateMockWaypoint(locoMock2.Object);
+            var mockedWaypoint = GenerateMockWaypoint(locoMock2);
 
             mockedWaypoint.Setup(w => w.CountUncoupledFromNearestToWaypoint).Returns(true);
 
@@ -404,6 +420,8 @@ namespace WaypointQueue.Tests
             reversedConsist.Reverse();
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(carCoupledTo, Car.LogicalEnd.A)).Returns(reversedConsist);
             _carServiceMock.Setup(cs => cs.EnumerateCoupled(carCoupledTo, Car.LogicalEnd.B)).Returns(consist);
+
+            _carServiceMock.Setup(cs => cs.GetWorkingLocomotiveIds(It.IsAny<BaseLocomotive>())).Returns(loco7Working ? ["7", "12"] : ["12"]);
 
             var result = _sut.FindDropoffAllExceptLocomotives(mockedWaypoint.Object, carCoupledTo);
 
@@ -424,62 +442,76 @@ namespace WaypointQueue.Tests
             var locoMock = GenerateMockCar(12, isLoco: true);
             consist =
             [
-                GenerateMockCar(0, SylvaArea).Object,
-                GenerateMockCar(1, SylvaArea).Object,
-                GenerateMockCar(2, WhittierArea).Object,
-                GenerateMockCar(3, BrysonArea).Object,
-                GenerateMockCar(4, BrysonArea).Object,
-                GenerateMockCar(5, WhittierArea).Object,
-                GenerateMockCar(6, SylvaArea).Object,
-                GenerateMockCar(7, WhittierArea).Object,
-                GenerateMockCar(8, BrysonArea).Object,
-                GenerateMockCar(9, WhittierArea).Object,
-                GenerateMockCar(10, SylvaArea).Object,
-                GenerateMockCar(11, BrysonArea).Object,
-                locoMock.Object,
+                GenerateMockCar(0, SylvaArea),
+                GenerateMockCar(1, SylvaArea),
+                GenerateMockCar(2, WhittierArea),
+                GenerateMockCar(3, BrysonArea),
+                GenerateMockCar(4, BrysonArea),
+                GenerateMockCar(5, WhittierArea),
+                GenerateMockCar(6, SylvaArea),
+                GenerateMockCar(7, WhittierArea),
+                GenerateMockCar(8, BrysonArea),
+                GenerateMockCar(9, WhittierArea),
+                GenerateMockCar(10, SylvaArea),
+                GenerateMockCar(11, BrysonArea),
+                locoMock,
             ];
             List<Car> reversed = [.. consist];
             reversed.Reverse();
 
-            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock.Object, Car.LogicalEnd.A)).Returns(consist);
-            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock.Object, Car.LogicalEnd.B)).Returns(reversed);
+            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.A)).Returns(consist);
+            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.B)).Returns(reversed);
 
             _carServiceMock.Setup(s => s.GetEndsRelativeToLocation(It.IsAny<Car>(), It.IsAny<Location>())).Returns((Car.LogicalEnd.A, Car.LogicalEnd.B));
+            SetupTrainEndA();
 
-            locomotive = locoMock.Object;
+            locomotive = locoMock;
+        }
+
+        // The train end nearest the waypoint is the end reached from the locomotive's logical end A
+        private void SetupTrainEndA()
+        {
+            float closestDistance = 0f;
+            Car? closestCar = null;
+            Car? furthestCar = null;
+            Car.LogicalEnd closestEnd = Car.LogicalEnd.A;
+            Car.LogicalEnd furthestEnd = Car.LogicalEnd.B;
+            _carServiceMock.Setup(s => s.GetTrainEndLocations(It.IsAny<Car>(), It.IsAny<Location>(), out closestDistance, out closestCar, out furthestCar, out closestEnd, out furthestEnd))
+                .Returns((new Location(), new Location()));
         }
 
         private void SetupMockedConsist(out Car locomotive, out List<Car> consist)
         {
             SetupAreaMocks();
             var locoMock = GenerateMockCar(3, isLoco: true);
-            consist = GenerateDestinationConsist(locoMock.Object);
+            consist = GenerateDestinationConsist(locoMock);
             List<Car> reversed = [.. consist];
             reversed.Reverse();
 
-            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock.Object, Car.LogicalEnd.A)).Returns(consist);
-            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock.Object, Car.LogicalEnd.B)).Returns(reversed);
+            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.A)).Returns(consist);
+            _carServiceMock.Setup(cs => cs.EnumerateCoupled(locoMock, Car.LogicalEnd.B)).Returns(reversed);
 
             _carServiceMock.Setup(s => s.GetEndsRelativeToLocation(It.IsAny<Car>(), It.IsAny<Location>())).Returns((Car.LogicalEnd.A, Car.LogicalEnd.B));
+            SetupTrainEndA();
 
-            locomotive = locoMock.Object;
+            locomotive = locoMock;
         }
 
         private List<Car> GenerateDestinationConsist(Car loco)
         {
             List<Car> consist =
             [
-                GenerateMockCar(0, SylvaArea).Object,
-                GenerateMockCar(1, SylvaArea).Object,
-                GenerateMockCar(2, WhittierArea).Object,
+                GenerateMockCar(0, SylvaArea),
+                GenerateMockCar(1, SylvaArea),
+                GenerateMockCar(2, WhittierArea),
                 loco,
-                GenerateMockCar(4, BrysonArea).Object,
-                GenerateMockCar(5, BrysonArea).Object,
-                GenerateMockCar(6, SylvaArea).Object,
-                GenerateMockCar(7, WhittierArea).Object,
-                GenerateMockCar(8, WhittierArea).Object,
-                GenerateMockCar(9, SylvaArea).Object,
-                GenerateMockCar(10, BrysonArea).Object,
+                GenerateMockCar(4, BrysonArea),
+                GenerateMockCar(5, BrysonArea),
+                GenerateMockCar(6, SylvaArea),
+                GenerateMockCar(7, WhittierArea),
+                GenerateMockCar(8, WhittierArea),
+                GenerateMockCar(9, SylvaArea),
+                GenerateMockCar(10, BrysonArea),
             ];
             return consist;
         }
@@ -488,16 +520,16 @@ namespace WaypointQueue.Tests
         {
             List<Car> cars =
             [
-                GenerateMockCar(0).Object,
-                GenerateMockCar(1).Object,
-                GenerateMockCar(2).Object,
-                GenerateMockCar(3).Object,
-                GenerateMockCar(4).Object,
-                GenerateMockCar(5).Object,
-                GenerateMockCar(6).Object,
-                GenerateMockCar(7).Object,
-                GenerateMockCar(8).Object,
-                GenerateMockCar(9).Object,
+                GenerateMockCar(0),
+                GenerateMockCar(1),
+                GenerateMockCar(2),
+                GenerateMockCar(3),
+                GenerateMockCar(4),
+                GenerateMockCar(5),
+                GenerateMockCar(6),
+                GenerateMockCar(7),
+                GenerateMockCar(8),
+                GenerateMockCar(9),
             ];
             return cars;
         }
@@ -510,33 +542,39 @@ namespace WaypointQueue.Tests
             return waypoint;
         }
 
-        private Mock<Car> GenerateMockCar(int roadNumber, bool isLoco = false)
+        // The waypoint's Locomotive is a BaseLocomotive, so locomotives must be mocked as one.
+        private static Car NewMockCar(bool isLoco)
         {
-            var mockCar = new Mock<Car>();
-            mockCar.Object.SetIdent(new CarIdent("PRR", roadNumber.ToString()));
-            mockCar.Object.id = roadNumber.ToString();
-
-            var destination = new OpsCarPosition();
-            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(mockCar.Object, out destination)).Returns(false);
-
-            _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(mockCar.Object)).Returns(isLoco);
-
-            return mockCar;
+            return isLoco ? new Mock<BaseLocomotive>().Object : new Mock<Car>().Object;
         }
 
-        private Mock<Car> GenerateMockCar(int roadNumber, Area area, bool isLoco = false)
+        private Car GenerateMockCar(int roadNumber, bool isLoco = false)
         {
-            var mockCar = new Mock<Car>();
-            mockCar.Object.SetIdent(new CarIdent("PRR", roadNumber.ToString()));
-            mockCar.Object.id = roadNumber.ToString();
+            Car car = NewMockCar(isLoco);
+            car.SetIdent(new CarIdent("PRR", roadNumber.ToString()));
+            car.id = roadNumber.ToString();
+
+            var destination = new OpsCarPosition();
+            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination)).Returns(false);
+
+            _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(car)).Returns(isLoco);
+
+            return car;
+        }
+
+        private Car GenerateMockCar(int roadNumber, Area area, bool isLoco = false)
+        {
+            Car car = NewMockCar(isLoco);
+            car.SetIdent(new CarIdent("PRR", roadNumber.ToString()));
+            car.id = roadNumber.ToString();
 
             var destination = new OpsCarPosition(displayName: area.identifier, identifier: area.identifier, []);
-            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(mockCar.Object, out destination)).Returns(true);
+            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination)).Returns(true);
             _opsControllerWrapperMock.Setup(w => w.AreaForCarPosition(destination)).Returns(area);
 
-            _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(mockCar.Object)).Returns(isLoco);
+            _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(car)).Returns(isLoco);
 
-            return mockCar;
+            return car;
         }
     }
 }

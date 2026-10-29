@@ -86,6 +86,9 @@ namespace WaypointQueue
                     {
 
                         var (rid, _) = RouteAssignmentRegistry.Get(carID);
+                        // The route may have been unassigned since the panel was built.
+                        if (string.IsNullOrEmpty(rid))
+                            return;
                         RouteAssignmentRegistry.Set(carID, rid, v);
                     }));
                 }

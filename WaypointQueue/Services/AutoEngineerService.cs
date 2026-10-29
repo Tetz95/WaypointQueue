@@ -6,15 +6,83 @@ using System;
 using System.Reflection;
 using Track;
 using UI.EngineControls;
+using WaypointQueue.Model;
 
 namespace WaypointQueue.Services
 {
     internal class AutoEngineerService(ICarService carService)
     {
-        public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null)
+        public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null, QueuedPose pose = null)
         {
-            OrderWaypoint maybeOrderWaypoint = new OrderWaypoint(Graph.LocationToString(location.Clamped()), coupleToCarId);
-            ordersHelper.SetOrdersValue(null, null, null, null, maybeOrderWaypoint);
+            // 2026.1 waypoint orders carry the location as a string, and the pose the player picked, if any.
+            Location mark = InsideSegment(location);
+            string locationString = GraphCompat.LocationToString(mark);
+            OrderWaypoint? maybeWaypoint = pose != null && !pose.IsEmpty
+                ? pose.ToOrder((BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value, mark, locationString, coupleToCarId)
+                : new OrderWaypoint(locationString, coupleToCarId);
+            ordersHelper.SetOrdersValue(null, null, null, null, maybeWaypoint);
+        }
+
+        // The order keeps its waypoint as text with the distance rounded to 1 mm, so a waypoint on the very end of a
+        // segment could round past it (47.088 on a 47.08782 m segment): the game then failed to route there on every
+        // try and the train never set off. A centimetre inside the segment survives the rounding.
+        private const float SegmentEndMargin = 0.01f;
+
+        // Whether two waypoint location strings name the same mark. The order carries the mark moved up to a centimetre
+        // inside its segment (InsideSegment) while the queue keeps it as placed, so they are compared as track
+        // positions, not as text.
+        internal static bool SameMark(string a, string b)
+        {
+            if (a == b)
+            {
+                return true;
+            }
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+            {
+                return false;
+            }
+            try
+            {
+                Location la = Graph.Shared.ResolveLocationString(a).Clamped();
+                Location lb = Graph.Shared.ResolveLocationString(b).Clamped();
+                if (la.segment == null || la.segment != lb.segment)
+                {
+                    return false;
+                }
+                float da = la.end == TrackSegment.End.A ? la.distance : la.segment.GetLength() - la.distance;
+                float db = lb.end == TrackSegment.End.A ? lb.distance : lb.segment.GetLength() - lb.distance;
+                return Math.Abs(da - db) <= 2f * SegmentEndMargin + 0.001f;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        internal static Location InsideSegment(Location location)
+        {
+            Location clamped = location.Clamped();
+            if (clamped.segment == null)
+            {
+                return clamped;
+            }
+            float length = clamped.segment.GetLength();
+            if (length <= 2f * SegmentEndMargin)
+            {
+                return clamped;
+            }
+            float distance = Math.Min(Math.Max(clamped.distance, SegmentEndMargin), length - SegmentEndMargin);
+            return new Location(clamped.segment, distance, clamped.end);
+        }
+
+        // Sends the locomotive to couple to one end of a car. 2026.1 plans it as the game's own coupling order (the
+        // train placed against that coupler, and a coupling by the wrong ends caught on arrival); Legacy sends the
+        // coupler's location.
+        public void SendToCouple(AutoEngineerOrdersHelper ordersHelper, Location couplerLocation, Car car, Car.LogicalEnd end)
+        {
+            var locomotive = (BaseLocomotive)Traverse.Create(ordersHelper).Field<Car>("_locomotive").Value;
+            OrderWaypoint? waypoint = global::Model.AI.Waypoints.PosedWaypoint.CoupleOrder(locomotive, Graph.Shared.Current, car, car.LogicalToEnd(end), WaypointEnd.Nearest);
+            ordersHelper.SetOrdersValue(null, null, null, null, waypoint);
         }
 
         public void SendToWaypoint(BaseLocomotive loco, Location location, string coupleToCarId = null)
@@ -81,8 +149,9 @@ namespace WaypointQueue.Services
 
         public bool IsNearWaypoint(ManagedWaypoint waypoint)
         {
-            (Location _, Location _) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out float closestDistance, out _, out _, out _, out _);
-            return closestDistance < 10;
+            (Location closestTrainEnd, Location _) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out float closestDistance, out _, out _, out _, out _);
+            // The straight-line distance alone would count a train on a parallel track as near
+            return closestDistance < 10 && Graph.Shared.Current.CheckSameRoute(closestTrainEnd, waypoint.Location, 10f);
         }
 
         public int GetOrdersMaxSpeed(BaseLocomotive locomotive)

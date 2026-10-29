@@ -84,6 +84,14 @@ namespace WaypointQueue
         public List<Car> FindCutByDestination(ManagedWaypoint wp)
         {
             List<Car> consistFromEnd = GetConsistForCutFromEnd(wp);
+
+            // With no matching car, the block search would return every car, cutting the whole train
+            if (!consistFromEnd.Any(GetDestinationPredicate(wp)))
+            {
+                ModLocator.Loader.Log($"No cars in {wp.Locomotive.Ident}'s consist match the uncoupling destination {wp.UncoupleDestinationId}");
+                return [];
+            }
+
             var matchFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: false);
             List<Car> carsToCut = matchFunction(consistFromEnd);
             return carsToCut;
@@ -92,6 +100,13 @@ namespace WaypointQueue
         public List<Car> FindPickupByDestination(ManagedWaypoint wp, Car carCoupledTo)
         {
             List<Car> carsAvailableForPickup = GetCarsAvailableForPickup(wp, carCoupledTo);
+
+            if (!carsAvailableForPickup.Any(GetDestinationPredicate(wp)))
+            {
+                // Pick up nothing: cut off every car that was coupled to
+                ModLocator.Loader.Log($"No cars available for pickup by {wp.Locomotive.Ident} match the destination {wp.UncoupleDestinationId}");
+                return carsAvailableForPickup;
+            }
 
             var pickupCalcFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: true);
 
@@ -112,6 +127,13 @@ namespace WaypointQueue
         public List<Car> FindDropoffByDestination(ManagedWaypoint wp, Car carCoupledTo)
         {
             List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
+
+            if (!carsAvailableForDropoff.Any(GetDestinationPredicate(wp)))
+            {
+                ModLocator.Loader.Log($"No cars available for dropoff by {wp.Locomotive.Ident} match the destination {wp.UncoupleDestinationId}");
+                return [];
+            }
+
             var dropoffCalcFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: true);
 
             if (wp.CountUncoupledFromNearestToWaypoint)
@@ -147,79 +169,46 @@ namespace WaypointQueue
                 excludeMatchFromCut = !wp.ExcludeMatchingCarsFromCut;
             }
 
+            Func<Car, bool> matchFunction = GetDestinationPredicate(wp);
+            return (cars) => FindMatchingCarBlock(cars, matchFunction, excludeMatchFromCut);
+        }
+
+        private Func<Car, bool> GetDestinationPredicate(ManagedWaypoint wp)
+        {
             if (wp.WillUncoupleByNoDestination)
             {
-                return (cars) => GetMatchingCarsByNoDestination(cars, excludeMatchFromCut);
+                return (car) => !opsControllerWrapper.TryGetCarDesination(car, out _);
             }
             if (wp.WillUncoupleByDestinationTrack)
             {
                 OpsCarPosition destinationMatch = TryGetDestinationTrackMatch(wp);
-                return (cars) => GetMatchingCarsByDestinationTrack(cars, destinationMatch, excludeMatchFromCut);
+                return (car) =>
+                {
+                    bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination);
+                    return hasDestination && carDestination.DisplayName == destinationMatch.DisplayName;
+                };
             }
             if (wp.WillUncoupleByDestinationIndustry)
             {
                 Industry industryMatch = TryGetDestinationIndustryMatch(wp);
-                return (cars) => GetMatchingCarsByDestinationIndustry(cars, industryMatch, excludeMatchFromCut);
+                return (car) =>
+                {
+                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination)) return false;
+                    IndustryComponent industryComponent = opsControllerWrapper.IndustryComponentForPosition(carDestination);
+                    return industryComponent?.Industry?.identifier == industryMatch.identifier;
+                };
             }
             if (wp.WillUncoupleByDestinationArea)
             {
                 Area areaMatch = TryGetDestinationAreaMatch(wp);
-                return (cars) => GetMatchingCarsByDestinationArea(cars, areaMatch, excludeMatchFromCut);
+                return (car) =>
+                {
+                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination)) return false;
+                    Area carArea = opsControllerWrapper.AreaForCarPosition(carDestination);
+                    return carArea?.identifier == areaMatch.identifier;
+                };
             }
             throw new UncouplingException("Failed to find a valid destination match function.", wp);
-        }
-
-        private List<Car> GetMatchingCarsByNoDestination(List<Car> consist, bool excludeMatchFromCut)
-        {
-            bool matchFunction(Car car)
-            {
-                bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out _);
-                return !hasDestination;
-            }
-            return FindMatchingCarBlock(consist, matchFunction, excludeMatchFromCut);
-        }
-
-        private List<Car> GetMatchingCarsByDestinationTrack(List<Car> consist, OpsCarPosition destinationMatch, bool excludeMatchFromCut)
-        {
-            bool matchFunction(Car car)
-            {
-                bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination);
-                bool carMatchesFilter = hasDestination && carDestination.DisplayName == destinationMatch.DisplayName;
-                return carMatchesFilter;
-            }
-            return FindMatchingCarBlock(consist, matchFunction, excludeMatchFromCut);
-        }
-
-        private List<Car> GetMatchingCarsByDestinationIndustry(List<Car> consist, Industry industryMatch, bool excludeMatchFromCut)
-        {
-            bool matchFunction(Car car)
-            {
-                bool carMatchesFilter = false;
-
-                if (opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination))
-                {
-                    IndustryComponent industryComponent = opsControllerWrapper.IndustryComponentForPosition(carDestination);
-                    carMatchesFilter = industryComponent?.Industry?.identifier == industryMatch.identifier;
-                }
-                return carMatchesFilter;
-            }
-            return FindMatchingCarBlock(consist, matchFunction, excludeMatchFromCut);
-        }
-
-        private List<Car> GetMatchingCarsByDestinationArea(List<Car> consist, Area areaMatch, bool excludeMatchFromCut)
-        {
-            bool matchFunction(Car car)
-            {
-                bool carMatchesFilter = false;
-
-                if (opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination))
-                {
-                    Area carArea = opsControllerWrapper.AreaForCarPosition(carDestination);
-                    carMatchesFilter = carArea?.identifier == areaMatch.identifier;
-                }
-                return carMatchesFilter;
-            }
-            return FindMatchingCarBlock(consist, matchFunction, excludeMatchFromCut);
         }
 
         private OpsCarPosition TryGetDestinationTrackMatch(ManagedWaypoint wp)
@@ -284,7 +273,9 @@ namespace WaypointQueue
 
         private List<Car> GetConsistForCutFromEnd(ManagedWaypoint wp)
         {
-            (LogicalEnd nearEnd, LogicalEnd farEnd) = carService.GetEndsRelativeToLocation(wp.Locomotive, wp.Location);
+            // Compare the ends of the whole train, not of the locomotive: the locomotive's two ends are only a few
+            // meters apart, so on curved track the wrong one can be nearer the waypoint and the train is read backwards
+            carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out _, out _, out _, out LogicalEnd nearEnd, out LogicalEnd farEnd);
             LogicalEnd directionToCountCars = wp.CountUncoupledFromNearestToWaypoint ? nearEnd : farEnd;
 
             List<Car> consistFromEnd = carService.EnumerateCoupled(wp.Locomotive, directionToCountCars);
@@ -389,6 +380,16 @@ namespace WaypointQueue
             ModLocator.Loader.Log($"Resolving uncoupling all except locomotives for {waypoint.Locomotive.Ident}");
             List<Car> consist = [.. waypoint.Locomotive.EnumerateCoupled(LogicalEnd.A)];
 
+            // Only the locomotives working the train stay; ones being hauled dead are cut with the cars
+            HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(waypoint.Locomotive);
+            bool IsKept(Car car) => workingLocoIds.Contains(car.id);
+
+            List<Car> inTowLocos = [.. consist.Where(c => carService.IsCarLocomotiveType(c) && !IsKept(c))];
+            if (inTowLocos.Count > 0)
+            {
+                ModLocator.Loader.Log($"Cutting {CarListToString(inTowLocos)} with the cars as locomotives in tow");
+            }
+
             List<List<Car>> listOfCarBlocks = [[]];
 
             for (int i = 0; i < consist.Count; i++)
@@ -400,8 +401,8 @@ namespace WaypointQueue
                 if (i < consist.Count - 1)
                 {
                     Car nextCar = consist[i + 1];
-                    bool currentCarIsLocoType = currentCar.CarType.IsLocomotive || currentCar.CarType.IsTender;
-                    bool nextCarIsLocoType = nextCar.CarType.IsLocomotive || currentCar.CarType.IsTender;
+                    bool currentCarIsLocoType = IsKept(currentCar);
+                    bool nextCarIsLocoType = IsKept(nextCar);
 
                     if ((currentCarIsLocoType && !nextCarIsLocoType) || (!currentCarIsLocoType && nextCarIsLocoType))
                     {
@@ -418,13 +419,17 @@ namespace WaypointQueue
                 {
                     Car lastCar = block.Last();
 
-                    if (i != listOfCarBlocks.Count - 1)
+                    if (i != listOfCarBlocks.Count - 1 && listOfCarBlocks[i + 1].Count > 0)
                     {
-                        ModLocator.Loader.Log($"Uncoupling {lastCar.Ident} on logical end B for block {block.Count} cars");
-                        UncoupleCar(lastCar, LogicalEnd.B);
+                        // Uncouple at the end facing the next block: a car can face either way in the consist, so its
+                        // end B isn't necessarily toward the next car.
+                        Car nextCar = listOfCarBlocks[i + 1][0];
+                        LogicalEnd endTowardNext = lastCar.CoupledTo(LogicalEnd.A) == nextCar ? LogicalEnd.A : LogicalEnd.B;
+                        ModLocator.Loader.Log($"Uncoupling {lastCar.Ident} on logical end {LogicalEndToString(endTowardNext)} for block {block.Count} cars");
+                        UncoupleCar(lastCar, endTowardNext);
                     }
 
-                    if (!lastCar.CarType.IsLocomotive && !lastCar.CarType.IsTender)
+                    if (!IsKept(lastCar))
                     {
                         if (waypoint.ApplyHandbrakesOnUncouple)
                         {
@@ -470,7 +475,11 @@ namespace WaypointQueue
         {
             List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
 
-            List<Car> carsToDropoff = GetFirstCarBlockWithNoLocomotives(carsAvailableForDropoff, excludeMatchFromCut: true);
+            // Drop everything up to the locomotives working the train, as uncoupling all except locomotives does:
+            // locomotives hauled dead, in tow, go with the cars. Stopping at any locomotive found no cars to drop
+            // when in-tow units sat next to the coupled car.
+            HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(wp.Locomotive);
+            List<Car> carsToDropoff = FindMatchingCarBlock(carsAvailableForDropoff, car => workingLocoIds.Contains(car.id), excludeMatchingCars: true);
 
             List<Car> carsToCut = [];
             if (carsToDropoff.Count > 0)
@@ -597,6 +606,14 @@ namespace WaypointQueue
                 throw new UncouplingException(e.Message, waypoint, e);
             }
 
+            // FindCarToUncouple picks the end by position in the consist list, assuming every car faces the same way.
+            // The car across the uncouple point must be outside the cut; if it isn't, this car faces backwards.
+            Car across = carToUncouple.CoupledTo(endToUncouple);
+            if (across == null || carsToCut.Contains(across))
+            {
+                endToUncouple = endToUncouple == LogicalEnd.A ? LogicalEnd.B : LogicalEnd.A;
+            }
+
             ModLocator.Loader.Log($"Uncoupling {carToUncouple.Ident} on end {LogicalEndToString(endToUncouple)} for cut of {carsToCut.Count} cars");
 
             UncoupleCar(carToUncouple, endToUncouple);
@@ -639,13 +656,17 @@ namespace WaypointQueue
                 Car adjacent = car.CoupledTo(endToUncouple);
                 if (adjacent != null)
                 {
-                    ModLocator.Loader.Log($"Uncoupling {car.Ident} and {adjacent.Ident}");
+                    // The adjacent car's end facing this car isn't necessarily the opposite logical end: when the two
+                    // cars face each other it's the same letter. Working on the wrong end pulled the cut lever and
+                    // closed the air on the adjacent car's far end, leaving the cars coupled (BEW 12, 2026-10-06).
+                    LogicalEnd adjacentEnd = adjacent.CoupledTo(LogicalEnd.A) == car ? LogicalEnd.A : LogicalEnd.B;
+                    ModLocator.Loader.Log($"Uncoupling {car.Ident} and {adjacent.Ident} (its end {LogicalEndToString(adjacentEnd)})");
                     car.ApplyEndGearChange(endToUncouple, EndGearStateKey.Anglecock, f: 0f);
                     car.ApplyEndGearChange(endToUncouple, EndGearStateKey.IsAirConnected, boolValue: false);
 
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.CutLever, 1f);
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.Anglecock, f: 0f);
-                    adjacent.ApplyEndGearChange(oppositeEnd, EndGearStateKey.IsAirConnected, boolValue: false);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.CutLever, 1f);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.Anglecock, f: 0f);
+                    adjacent.ApplyEndGearChange(adjacentEnd, EndGearStateKey.IsAirConnected, boolValue: false);
                 }
                 else
                 {

@@ -541,6 +541,7 @@ namespace WaypointQueue.UI
                 }
             }
 
+            ModStateManager.Shared.SaveRoute(route);
             RebuildWithScrolls();
         }
 
@@ -565,6 +566,7 @@ namespace WaypointQueue.UI
                 }
             }
 
+            ModStateManager.Shared.SaveRoute(route);
             RebuildWithScrolls();
         }
 

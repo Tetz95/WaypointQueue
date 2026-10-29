@@ -47,6 +47,7 @@ namespace WaypointQueue
         public static float WaypointTickInterval = 0.5f;
         private readonly Dictionary<string, float> _timeSinceLastRerouteByLocoId = [];
         private readonly Queue<string> _rerouteRequestLocoIdQueue = [];
+        private readonly HashSet<string> _rerouteRequestLocoIdsQueued = [];
 
         private void Awake()
         {
@@ -139,10 +140,18 @@ namespace WaypointQueue
                         _timeSinceLastRerouteByLocoId[entry.LocomotiveId] = 0;
                     }
 
-                    if (_timeSinceLastRerouteByLocoId[entry.LocomotiveId] > 4f)
+                    // Queue each loco once; it stays due every tick until its reroute runs.
+                    if (_timeSinceLastRerouteByLocoId[entry.LocomotiveId] > 4f && _rerouteRequestLocoIdsQueued.Add(entry.LocomotiveId))
                     {
                         _rerouteRequestLocoIdQueue.Enqueue(entry.LocomotiveId);
                     }
+                }
+
+                // Send past waypoint without stopping: switch to the clear point while still approaching
+                if (entry.UnresolvedWaypoint != null && _autoEngineerService.HasActiveWaypoint(ordersHelper)
+                    && _waypointResolver.TryOrderClearBeyondEarly(entry.UnresolvedWaypoint, ordersHelper))
+                {
+                    continue;
                 }
 
                 if (!IsReadyToResolve(entry, ordersHelper))
@@ -164,7 +173,7 @@ namespace WaypointQueue
                     }
                     else
                     {
-                        //Loader.Log($"Finish resolving waypoint {state.UnresolvedWaypoint.Id} {state.UnresolvedWaypoint.Location} for {state.UnresolvedWaypoint.Locomotive.Ident}");
+                        //ModLocator.Loader.Log($"Finish resolving waypoint {state.UnresolvedWaypoint.Id} {state.UnresolvedWaypoint.Location} for {state.UnresolvedWaypoint.Locomotive.Ident}");
                         RemoveWaypoint(entry.UnresolvedWaypoint);
                     }
                 }
@@ -236,6 +245,7 @@ namespace WaypointQueue
             if (_rerouteRequestLocoIdQueue.Count > 0)
             {
                 string locoId = _rerouteRequestLocoIdQueue.Dequeue();
+                _rerouteRequestLocoIdsQueued.Remove(locoId);
                 _timeSinceLastRerouteByLocoId[locoId] = 0;
                 RerouteCurrentWaypoint(locoId);
             }
@@ -243,8 +253,14 @@ namespace WaypointQueue
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(AutoEngineerPlanner), "SendMessageToRouteRequester")]
-        static bool SendMessageToRouteRequesterPrefix(AutoEngineerPlanner __instance)
+        static bool SendMessageToRouteRequesterPrefix(AutoEngineerPlanner __instance, Network.Messages.AlertLevel alertLevel)
         {
+            // A periodic reroute stays quiet about the route it set, but not about a waypoint it can't reach: otherwise
+            // "Unable to find a path to waypoint" never reached the player (a turntable not lined to a stall, say).
+            if (alertLevel == Network.Messages.AlertLevel.Error)
+            {
+                return true;
+            }
             BaseLocomotive loco = Traverse.Create(__instance).Field("_locomotive").GetValue<BaseLocomotive>();
             if (Shared._timeSinceLastRerouteByLocoId.TryGetValue(loco.id, out float elapsed) && elapsed == 0)
             {
@@ -285,6 +301,22 @@ namespace WaypointQueue
             return needsEndOfTrackResolve || needsAlreadyCoupledResolve || needsResolveFromWaitingSkipped;
         }
 
+        /**
+         * A coupling waypoint whose car is already in the train before the waypoint starts. Once the waypoint has
+         * actually coupled, HasResolvedBrakeSystemOnCouple is set, so a waypoint that is re-sent after coupling
+         * (for example after leaving and re-entering waypoint mode) isn't caught.
+         */
+        private bool IsCouplingTargetAlreadyInTrain(ManagedWaypoint wp, out Car car)
+        {
+            car = null;
+            if (!wp.IsCoupling || wp.HasResolvedBrakeSystemOnCouple || !wp.TryResolveCoupleToCar(out car))
+            {
+                return false;
+            }
+            Car target = car;
+            return wp.Locomotive.EnumerateCoupled().Any(c => c.id == target.id);
+        }
+
         private bool IsUnresolvedWaypointAlreadyCoupled(ManagedWaypoint wp)
         {
             if (wp.IsCoupling && wp.TryResolveCoupleToCar(out Car car))
@@ -298,7 +330,7 @@ namespace WaypointQueue
             return false;
         }
 
-        public void AddWaypoint(BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacing, bool isInsertingNext)
+        public void AddWaypoint(BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacing, bool isInsertingNext, QueuedPose pose = null)
         {
             Location clampedLocation = location.Clamped();
             bool isCoupling = coupleToCarId != null && coupleToCarId.Length > 0;
@@ -309,13 +341,13 @@ namespace WaypointQueue
             ModLocator.Loader.Log($"Trying to {actionName} waypoint for loco {loco.Ident} to {clampedLocation} with {couplingLogSegment}");
 
             LocoWaypointState entry = ModStateManager.Shared.GetLocoWaypointState(loco.id);
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupleToCarId);
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupleToCarId) { Pose = pose };
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             if (isReplacing && entry.Waypoints.Count > 0)
             {
                 waypoint.StatusLabel = "Running to waypoint";
-                if (entry.Waypoints[0].Id == entry.UnresolvedWaypoint.Id)
+                if (entry.Waypoints[0].Id == entry.UnresolvedWaypoint?.Id)
                 {
                     _waypointResolver.CleanupBeforeRemovingWaypoint(entry.UnresolvedWaypoint);
                     entry.UnresolvedWaypoint = waypoint;
@@ -346,10 +378,16 @@ namespace WaypointQueue
         {
             Location clampedLocation = location.Clamped();
             LocoWaypointState locoState = ModStateManager.Shared.GetLocoWaypointState(loco.id); ;
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, location, coupledToCarId);
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupledToCarId);
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             int beforeWaypointIndex = locoState.Waypoints?.FindIndex(w => w.Id == beforeWaypointId) ?? 0;
+            if (beforeWaypointIndex < 0)
+            {
+                // The waypoint to insert before was resolved or removed meanwhile; put the new one first.
+                ModLocator.Loader.LogDebug($"Waypoint {beforeWaypointId} to insert before no longer exists for {loco.Ident}; inserting at the front");
+                beforeWaypointIndex = 0;
+            }
 
             if (beforeWaypointIndex == 0)
             {
@@ -409,7 +447,8 @@ namespace WaypointQueue
 
         private void TryHandleLoopingRoutes()
         {
-            IEnumerable<RouteAssignment> assignmentsToCheck = ModStateManager.Shared.RouteAssignments.Values.Where(ra => ra.Loop);
+            // Copied, since assignments that no longer resolve are removed from the collection below.
+            List<RouteAssignment> assignmentsToCheck = ModStateManager.Shared.RouteAssignments.Values.Where(ra => ra.Loop).ToList();
 
             foreach (var assignment in assignmentsToCheck)
             {
@@ -450,7 +489,7 @@ namespace WaypointQueue
 
             ManagedWaypoint waypointToRemove = state.Waypoints[index];
 
-            if (waypointToRemove.Id == state.UnresolvedWaypoint.Id)
+            if (waypointToRemove.Id == state.UnresolvedWaypoint?.Id)
             {
                 state.UnresolvedWaypoint = null;
             }
@@ -484,10 +523,37 @@ namespace WaypointQueue
 
             state.Waypoints[index] = waypoint;
 
-            state.UnresolvedWaypoint = state.Waypoints.FirstOrDefault();
+            // The unresolved waypoint is the one already sent to the train. Changing a waypoint that hasn't been sent
+            // yet (its options set before the auto engineer was put in waypoint mode, say) marked it as sent: the next
+            // tick found no waypoint order, took the train to have arrived, and resolved it where the train stood (a
+            // "send past waypoint" then went the wrong way). Only the sent waypoint's own copy is refreshed.
+            if (state.UnresolvedWaypoint != null && state.UnresolvedWaypoint.Id == waypoint.Id)
+            {
+                state.UnresolvedWaypoint = waypoint;
+            }
 
             ModLocator.Loader.LogDebug($"Saving loco queue state after updating waypoint {waypoint.Id} for loco id: {waypoint.LocomotiveId}");
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+        }
+
+        // Clears a waypoint's errors so the queue picks it up again: its remaining orders run again with the waypoint's
+        // current settings (change them first if the error came from a setting).
+        public void ResumeWaypoint(ManagedWaypoint waypoint)
+        {
+            ModLocator.Loader.Log($"Resuming the waypoint for {waypoint.Locomotive.Ident} after {waypoint.Errors.Count} error(s)");
+            // The train stopped short of the waypoint (wrong track or coupling ends): send it there again.
+            bool resend = waypoint.Errors.Any(e => e.ErrorType == PatchWaypointMismatch.ErrorType);
+            waypoint.Errors = [];
+            waypoint.StatusLabel = "Running to waypoint";
+            UpdateWaypoint(waypoint);
+            if (resend)
+            {
+                LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId);
+                if (state.Waypoints.FirstOrDefault()?.Id == waypoint.Id)
+                {
+                    SendToFirstWaypoint(state);
+                }
+            }
         }
 
         public void ReorderWaypoint(ManagedWaypoint waypoint, int newIndex)
@@ -560,8 +626,52 @@ namespace WaypointQueue
 
             state.UnresolvedWaypoint = waypoint;
 
-            ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
-            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId);
+            if (IsCouplingTargetAlreadyInTrain(waypoint, out Car coupledCar))
+            {
+                // Otherwise the waypoint counts as coupled at once, and any post-coupling cut is
+                // calculated from a car in the middle of the train
+                _autoEngineerService.CancelActiveOrders(state.Locomotive);
+                var error = new CouplingException($"{waypoint.Locomotive.Ident} can't couple to {coupledCar.Ident} because it's already in {waypoint.Locomotive.Ident}'s train, probably picked up by an earlier waypoint. Delete this waypoint and add one without coupling, or couple to a different car.", waypoint);
+                _waypointResolver.HandleProcessingError("Coupling", error, waypoint);
+                ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+                return;
+            }
+
+            QueuedPose pose = waypoint.Pose;
+            // 2026.1 places the train past the waypoint itself (the "train past it" pose), so the move past isn't a
+            // second order after arriving. A pose the player picked already says where the train stands.
+            if (!waypoint.StopAtWaypoint && waypoint.MoveTrainPastWaypoint && !waypoint.HasAnyCouplingOrders)
+            {
+                if (pose == null || !pose.IsPosed)
+                {
+                    pose = QueuedPose.PastTheMark(state.Locomotive, waypoint.Location);
+                    waypoint.StatusLabel = "Sending train past waypoint";
+                }
+                waypoint.StopAtWaypoint = true;
+                waypoint.MoveTrainPastWaypoint = false;
+            }
+            // A waypoint on a car goes out as the game's coupling order to the car's nearer end (the train placed against
+            // that coupler), as the picker made it: 2026.1's planner doesn't route a plain waypoint that only names the car
+            // (it kept rebuilding "not on current route" and never set off). A pose the player picked is sent as picked.
+            if (!string.IsNullOrEmpty(waypoint.CoupleToCarId) && (pose == null || !pose.IsPosed) && waypoint.TryResolveCoupleToCar(out Car coupleToCar))
+            {
+                Car.LogicalEnd end = _carService.ClosestLogicalEndTo(coupleToCar, waypoint.Location);
+                ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to couple to {coupleToCar.Ident} (end {end})");
+                _autoEngineerService.SendToCouple(ordersHelper, waypoint.Location, coupleToCar, end);
+                // The order marks the coupler where the car stands now; keep the waypoint on it, or the "first waypoint
+                // adjusted" check (ModStateManager) would see a different mark and send it again on every update.
+                string sent = ordersHelper.Orders.Waypoint?.LocationString;
+                if (sent != null && !AutoEngineerService.SameMark(sent, waypoint.LocationString))
+                {
+                    waypoint.OverwriteLocation(Graph.Shared.ResolveLocationString(sent));
+                }
+            }
+            else
+            {
+                string poseText = pose == null || pose.IsEmpty ? "no pose" : $"pose end {pose.ArrivingEnd} side {pose.BodyToward} length {pose.BodyLength:0} m, {(pose.Turns?.Length ?? 0) / 3} turn(s)";
+                ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location} ({poseText})");
+                _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
+            }
 
             _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
 

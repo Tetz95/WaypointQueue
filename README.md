@@ -1,3 +1,22 @@
+# Waypoint Queue (Tetz fork)
+
+This branch (`tetz`) is Tetz95's fork of [PrinceOfPluto's Waypoint Queue](https://github.com/PrinceOfPluto/WaypointQueue) for Railroader 2026.1 (0.6), built on his 2.0.0. `main` stays a copy of his `main`. The original is MIT-licensed; its [LICENSE.txt](LICENSE.txt) applies to this fork too.
+
+What the fork adds:
+- **Train poses kept through the queue.** The pose chosen in the game's waypoint picker (Space: which end of the train stands on the mark, and on which side) is kept for queued waypoints and sent with them; the Waypoints window shows how the train will stand. *Send past waypoint* goes out as the game's "train past the mark" pose.
+- **The train as it will be.** When picking a waypoint for later in the queue, the picker draws and poses the train as it will be by then, after the earlier couplings and cuts, and says so in its prompt.
+- **Couplings** go out as the game's coupling order for the near end of the car, and a coupling to a car already in the train is refused instead of cutting from the middle of it.
+- **Switches:** switches the auto engineer threw are put back once the train is clear, also after *Send past waypoint*, a cancelled route or a save and load; under CTC a route that turns back beyond an interlocking runs clear of the plant first (setting: *Turn back clear of CTC interlockings*).
+- **Cuts:** cutting works with cars turned around in the train, uncouples on the end that faces the next car, and *All except locomotives* sends locomotives in tow with the cars.
+- **Non-stop waypoints** are reached along the track (not in a straight line) and hand over to the next waypoint before the engineer brakes for them; no route no longer turns the stop into running at track speed.
+- **Refuelling** counts a slot full at the game's own capacity (coal is limited by volume), lines the slot up with a posed waypoint and finds modded loaders built after load.
+
+It loads as its own mod (`tetz95/waypoint-queue`) and is incompatible with the original (`princeofpluto/waypointqueue`): install one or the other.
+
+Building: the projects are SDK-style, so `dotnet build WaypointQueue/WaypointQueue.csproj` builds without Visual Studio. In `Paths.user` set `RrInstallDir` (the game folder) and `RrHomeDir` (the folder whose `Mods` the build installs into); `-p:NoInstall=true` builds into `bin\` instead. The Legacy (2025.1) version of these fixes is on the `tetz-legacy` branch.
+
+---
+
 # Waypoint Queue
 
 ## Installation

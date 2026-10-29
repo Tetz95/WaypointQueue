@@ -20,6 +20,7 @@ namespace WaypointQueue.Services
         void SetHandbrakesOnCut(List<Car> cars);
         void UpdateCarsForAE(BaseLocomotive locomotive);
         bool IsCarLocomotiveType(Car car);
+        HashSet<string> GetWorkingLocomotiveIds(BaseLocomotive lead);
         bool ShouldPeriodicReroute(BaseLocomotive locomotive);
         void TogglePeriodicRerouteForLoco(BaseLocomotive locomotive);
         BaseLocomotive GetLocoById(string locoId);

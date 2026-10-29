@@ -41,6 +41,10 @@ namespace WaypointQueue.Services
             return "Unknown Load Id";
         }
 
+        // Modded loaders (e.g. AlinasMapMod LoaderBuilder splineys built by RailForge) can be created
+        // after PropertiesDidRestore, so the collections are refreshed when they may be stale.
+        private const float StaleCollectionsSeconds = 10f;
+        private float _lastRebuildTime = float.NegativeInfinity;
 
         public void RebuildCollections()
         {
@@ -49,6 +53,17 @@ namespace WaypointQueue.Services
 
             _carLoadTargetLoaders = [.. UnityEngine.Object.FindObjectsByType<CarLoadTargetLoader>(FindObjectsSortMode.None)];
             _carLoaderSequencers = [.. UnityEngine.Object.FindObjectsByType<CarLoaderSequencer>(FindObjectsSortMode.None)];
+            _lastRebuildTime = Time.realtimeSinceStartup;
+        }
+
+        private void RebuildCollectionsIfStale()
+        {
+            if (Time.realtimeSinceStartup - _lastRebuildTime > StaleCollectionsSeconds
+                || _carLoadTargetLoaders.Any(l => l == null)
+                || _carLoaderSequencers.Any(s => s == null))
+            {
+                RebuildCollections();
+            }
         }
 
         public void OrderToRefuel(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper, out List<BaseLocomotive> locosForRefuelList)
@@ -87,7 +102,7 @@ namespace WaypointQueue.Services
 
         public void OrderLocomotiveToRefuel(BaseLocomotive locoForRefuel, ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper)
         {
-            Location locationToMove = GetRefuelLocation(locoForRefuel, waypoint);
+            Location locationToMove = BeyondArrivalShortfall(waypoint.Locomotive, GetRefuelLocation(locoForRefuel, waypoint));
             _cachedCarLoadQuantityByFuelCarId.Remove(locoForRefuel.id);
 
             ModLocator.Loader.Log($"Sending refueling waypoint for {waypoint.Locomotive.Ident} to {locationToMove} to refuel {locoForRefuel.Ident}");
@@ -96,6 +111,18 @@ namespace WaypointQueue.Services
             waypoint.StopAtWaypoint = true;
             WaypointQueueController.Shared.UpdateWaypoint(waypoint);
             autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
+        }
+
+        // The engineer counts a waypoint reached once it lies within a metre of the train (AutoEngineerPlanner.IsUnderTrain)
+        // and stops there: the train's end came to rest about 0.7 m short of a refuel mark (0.65-0.77 m in four stops),
+        // outside a small tender's fill radius. The mark goes that much further out, away from the train.
+        private const float ArrivalShortfall = 0.7f;
+
+        private Location BeyondArrivalShortfall(BaseLocomotive locomotive, Location mark)
+        {
+            (_, Location furthestTrainEnd) = carService.GetTrainEndLocations(locomotive, mark, out _, out _, out _, out _, out _);
+            Location outward = Graph.Shared.LocationFacingAwayFrom(mark, furthestTrainEnd);
+            return Graph.Shared.Current.LocationByMoving(outward, ArrivalShortfall, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
         }
 
         private List<BaseLocomotive> GetCoupledLocosForRefuel(BaseLocomotive locomotive, string refuelLoadName, Location location)
@@ -117,7 +144,7 @@ namespace WaypointQueue.Services
         {
             Car fuelCar = GetFuelCar(locomotive);
 
-            Vector3 loadSlotPosition = GetFuelCarLoadSlotPosition(fuelCar, waypoint.RefuelLoadId, out float slotMaxCapacity);
+            Vector3 loadSlotPosition = GetFuelCarLoadSlotPosition(fuelCar, waypoint, out float slotMaxCapacity);
             waypoint.RefuelMaxCapacity = slotMaxCapacity;
 
             if (!Graph.Shared.TryGetLocationFromGamePoint(waypoint.RefuelPoint, 10f, out Location targetLoaderLocation))
@@ -189,20 +216,22 @@ namespace WaypointQueue.Services
 
             ModLocator.Loader.LogDebug($"distanceToMove is {distanceToMove}");
 
-            Location orientedTargetLocation = Graph.Shared.LocationOrientedToward(targetLoaderLocation, locationToMoveToward);
+            // Legacy's LocationOrientedToward faced away from the end (2026.1's faces toward it): LocationFacingAwayFrom.
+            Location orientedTargetLocation = Graph.Shared.LocationFacingAwayFrom(targetLoaderLocation, locationToMoveToward);
 
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedTargetLocation, -distanceToMove, false, true);
+            Location locationToMove = Graph.Shared.LocationByMoving(orientedTargetLocation, distanceToMove, false, true);
 
             return locationToMove;
         }
 
-        private Vector3 GetFuelCarLoadSlotPosition(Car fuelCar, string refuelLoadName, out float maxCapacity)
+        private Vector3 GetFuelCarLoadSlotPosition(Car fuelCar, ManagedWaypoint waypoint, out float maxCapacity)
         {
-            LoadSlot loadSlot = fuelCar.Definition.LoadSlots.Find(slot => slot.RequiredLoadIdentifier == refuelLoadName);
-
-            maxCapacity = loadSlot.MaximumCapacity;
-
-            int loadSlotIndex = fuelCar.Definition.LoadSlots.IndexOf(loadSlot);
+            int loadSlotIndex = FuelSlotIndex(fuelCar, waypoint.RefuelLoadId);
+            if (loadSlotIndex < 0)
+            {
+                throw new RefuelException($"{fuelCar.Ident} has no {waypoint.RefuelLoadId} load slot.", waypoint);
+            }
+            maxCapacity = FuelSlotCapacity(fuelCar, loadSlotIndex);
 
             List<CarLoadTarget> carLoadTargets = fuelCar.GetComponentsInChildren<CarLoadTarget>().ToList();
             CarLoadTarget loadTarget = carLoadTargets.Find(clt => clt.slotIndex == loadSlotIndex);
@@ -210,6 +239,39 @@ namespace WaypointQueue.Services
             Vector3 loadSlotPosition = CalculatePositionFromLoadTarget(fuelCar, loadTarget);
 
             return loadSlotPosition;
+        }
+
+        // Where the slot stopped relative to the loader, for the log: the loader fills only a slot within its radius.
+        public void LogSlotAlignment(ManagedWaypoint waypoint)
+        {
+            try
+            {
+                BaseLocomotive loco = waypoint.RefuelLocoIdsQueue.Count > 0 ? carService.GetLocoById(waypoint.RefuelLocoIdsQueue.First()) : waypoint.Locomotive;
+                Car fuelCar = GetFuelCar(loco);
+                Vector3 slot = GetFuelCarLoadSlotPosition(fuelCar, waypoint, out _);
+                Graph.Shared.TryGetLocationFromGamePoint(waypoint.RefuelPoint, 10f, out Location loader);
+                Graph.Shared.TryGetLocationFromGamePoint(slot, 10f, out Location slotLocation);
+                float along = loader.IsValid && slotLocation.IsValid ? Graph.Shared.GetDistanceBetweenClose(slotLocation, loader) : -1f;
+                (Location closest, Location furthest) = carService.GetTrainEndLocations(loco, loader, out _, out _, out _, out _, out _);
+                ModLocator.Loader.Log($"Refuel: {fuelCar.Ident} stopped with its {waypoint.RefuelLoadId} slot {Vector3.Distance(slot.ZeroY(), waypoint.RefuelPoint.ZeroY()):0.00} m from the loader ({along:0.00} m along the track); train ends {closest} (nearest the loader) and {furthest}");
+            }
+            catch (Exception e)
+            {
+                ModLocator.Loader.Log($"Refuel: couldn't measure the slot's alignment: {e.Message}");
+            }
+        }
+
+        // The fuel car's slot for a refuel load name ("water"); 2026.1 slots name the load by id ("rr/water"). -1 if none.
+        private static int FuelSlotIndex(Car fuelCar, string refuelLoadId)
+        {
+            return fuelCar.Definition.LoadSlots.FindIndex(slot => slot.RequiredLoadIdentifier == refuelLoadId);
+        }
+
+        // What the slot holds when full, as the game's loader works it out (volume times density can cap coal).
+        private static float FuelSlotCapacity(Car fuelCar, int slotIndex)
+        {
+            LoadSlot slot = fuelCar.Definition.LoadSlots[slotIndex];
+            return slot.CalculateMaximumCapacity(slot.RequiredLoadIdentifier, fuelCar);
         }
 
         private Vector3 CalculatePositionFromLoadTarget(Car fuelCar, CarLoadTarget loadTarget)
@@ -263,7 +325,8 @@ namespace WaypointQueue.Services
             {
                 return [DieselLoadId];
             }
-            return null;
+            // Other locomotive types (and other cars) take nothing WPQ knows how to refuel
+            return [];
         }
 
         public void CheckNearbyFuelLoaders(ManagedWaypoint waypoint)
@@ -273,9 +336,11 @@ namespace WaypointQueue.Services
             CarLoadTargetLoader closestLoader = null;
             float shortestDistance = 0;
 
+            RebuildCollectionsIfStale();
+
             foreach (CarLoadTargetLoader targetLoader in _carLoadTargetLoaders)
             {
-                if (!validLoads.Contains(targetLoader.load?.id?.ToLower()))
+                if (targetLoader == null || !validLoads.Contains(targetLoader.load?.id?.ToLower()))
                 {
                     continue;
                 }
@@ -346,7 +411,8 @@ namespace WaypointQueue.Services
         public bool IsLocoFull(BaseLocomotive locomotive, string refuelLoadName, float refuelMaxCapacity, out bool isIncreasing)
         {
             Car fuelCar = GetFuelCar(locomotive);
-            CarLoadInfo? carLoadInfo = fuelCar.GetLoadInfo(refuelLoadName, out int slotIndex);
+            int slotIndex = FuelSlotIndex(fuelCar, refuelLoadName);
+            CarLoadInfo? carLoadInfo = slotIndex < 0 ? null : fuelCar.GetLoadInfo(slotIndex);
             isIncreasing = false;
 
             if (!carLoadInfo.HasValue)
@@ -361,9 +427,11 @@ namespace WaypointQueue.Services
             }
             _cachedCarLoadQuantityByFuelCarId[locomotive.id] = carLoadInfo.Value.Quantity;
 
-            LoadSlot loadSlot = fuelCar.Definition.LoadSlots[slotIndex];
+            // As the game's loader decides it: coal (pounds, with a density) can be capped by the tender's volume below the
+            // slot's authored maximum, and the loader stops there.
+            float capacity = FuelSlotCapacity(fuelCar, slotIndex);
 
-            bool isFullVanilla = carLoadInfo.Value.Quantity / loadSlot.MaximumCapacity > 0.999f;
+            bool isFullVanilla = capacity <= 0f || carLoadInfo.Value.Quantity / capacity > 0.999f;
 
             if (isFullVanilla)
             {
@@ -420,6 +488,11 @@ namespace WaypointQueue.Services
             CarLoadTargetLoader loaderTarget = FindCarLoadTargetLoader(waypoint);
             if (loaderTarget == null)
             {
+                RebuildCollections();
+                loaderTarget = FindCarLoadTargetLoader(waypoint);
+            }
+            if (loaderTarget == null)
+            {
                 ModLocator.Loader.LogError($"_carLoadTargetLoaders: {String.Join("-", _carLoadTargetLoaders.Select(c => $"[{c.keyValueObject.RegisteredId}, {waypoint.RefuelLoadId} loader]"))}");
                 var message = $"Cannot find valid CarLoadTargetLoader for \"{waypoint.RefuelLoadId}\" at point {waypoint.RefuelPoint} with registered id {waypoint.RefuelLoaderRegisteredId}.";
                 ModLocator.Loader.LogError(message);
@@ -428,8 +501,9 @@ namespace WaypointQueue.Services
                     // Only throw if we are trying to activate the loader. If we're just cleaning up then it can fail silently.
                     throw new RefuelException(message, waypoint);
                 }
+                return;
             }
-            CarLoaderSequencer sequencer = _carLoaderSequencers.Find(x => x.keyValueObject.RegisteredId == loaderTarget.keyValueObject.RegisteredId);
+            CarLoaderSequencer sequencer = _carLoaderSequencers.Find(x => x != null && x.keyValueObject.RegisteredId == loaderTarget.keyValueObject.RegisteredId);
             if (sequencer != null)
             {
                 StateManager.ApplyLocal(new PropertyChange(sequencer.keyValueObject.RegisteredId, sequencer.readWantsLoadingKey, new BoolPropertyValue(value)));
@@ -453,16 +527,16 @@ namespace WaypointQueue.Services
             // First try to find by registered id
             if (!String.IsNullOrEmpty(waypoint.RefuelLoaderRegisteredId))
             {
-                loader = _carLoadTargetLoaders.Find(l => l.keyValueObject.RegisteredId == waypoint.RefuelLoaderRegisteredId);
+                loader = _carLoadTargetLoaders.Find(l => l != null && l.keyValueObject.RegisteredId == waypoint.RefuelLoaderRegisteredId);
             }
 
             // If that fails, then try to find by position
             if (loader == null)
             {
                 Vector3 worldPosition = WorldTransformer.GameToWorld(waypoint.RefuelPoint);
-                //Loader.LogDebug($"Starting search for target loader matching world point {worldPosition}");
-                loader = _carLoadTargetLoaders.Find(l => l.transform.position == worldPosition);
-                //Loader.LogDebug($"Found matching {loader.load.name} loader at game point {waypoint.RefuelPoint}");
+                //ModLocator.Loader.LogDebug($"Starting search for target loader matching world point {worldPosition}");
+                loader = _carLoadTargetLoaders.Find(l => l != null && l.transform.position == worldPosition);
+                //ModLocator.Loader.LogDebug($"Found matching {loader.load.name} loader at game point {waypoint.RefuelPoint}");
             }
 
             return loader;
@@ -481,10 +555,10 @@ namespace WaypointQueue.Services
 
             (Location closestTrainEndLocation, Location furthestTrainEndLocation) = carService.GetTrainEndLocations(locomotive, targetLoaderLocation, out _, out _, out _, out _, out _);
 
-            Location orientedFurthestEnd = Graph.Shared.LocationOrientedToward(furthestTrainEndLocation, targetLoaderLocation);
+            Location orientedFurthestEnd = Graph.Shared.LocationFacingAwayFrom(furthestTrainEndLocation, targetLoaderLocation);
 
             float distanceToMoveAwayFromLoader = 10;
-            Location locationToMove = Graph.Shared.LocationByMoving(orientedFurthestEnd, -distanceToMoveAwayFromLoader);
+            Location locationToMove = Graph.Shared.LocationByMoving(orientedFurthestEnd, distanceToMoveAwayFromLoader);
 
             ModLocator.Loader.Log($"Sending retry refueling waypoint for {waypoint.Locomotive.Ident} to {locationToMove} to refuel {currentRefuelLoco.Ident}");
             waypoint.StatusLabel = $"Moving to refuel {waypoint.RefuelLoadId}";

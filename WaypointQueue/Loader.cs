@@ -145,6 +145,8 @@ namespace WaypointQueue
         {
             HarmonyInstance.UnpatchAll(ModContext.ModIdentifier);
 
+            PendingSwitchRestorer.Shutdown();
+
             if (Instance != null) UnityEngine.Object.DestroyImmediate(Instance.gameObject);
             Instance = null;
 

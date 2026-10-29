@@ -309,6 +309,17 @@ namespace WaypointQueue.UI
                 row.AddLabel("Do not automatically set passing speed limit when not stopping at waypoint");
             });
 
+            builder.HStack(row =>
+            {
+                row.AddToggle(() => Settings.ReverseClearOfInterlockings, (bool val) =>
+                {
+                    Settings.ReverseClearOfInterlockings = val;
+                    Save();
+                });
+                row.Spacer(8f);
+                row.AddLabel("Turn back clear of CTC interlockings (the whole train leaves the plant before reversing)");
+            });
+
             builder.Spacer(16f);
             builder.AddLabel("Passing speed for kicking cars");
             builder.Spacer(8f);

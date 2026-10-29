@@ -5,21 +5,60 @@ using System.Collections.Generic;
 using Track;
 using UI.Common;
 using UI.EngineControls;
+using UnityEngine;
+using WaypointQueue.Model;
 using WaypointQueue.State;
+using WaypointQueue.UI;
 using Location = Track.Location;
+using Graph = Track.Graph;
 
 namespace WaypointQueue
 {
     [HarmonyPatch(typeof(AutoEngineerOrdersHelper))]
     internal class PatchAutoEngineerOrdersHelper
     {
+        // 2026.1: the picker hands over a whole OrderWaypoint, through SetWaypoint in waypoint mode or SetWaypointOrder
+        // (which also switches the engineer to waypoint mode). The queue keeps its location and the car to couple to;
+        // the pose the picker chose (arriving end, facing, turns) isn't kept yet.
         [HarmonyPrefix]
         [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypoint))]
         static bool SetWaypointPrefix(OrderWaypoint waypoint, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
         {
-            //Loader.LogDebug($"SetWaypoint prefix");
+            if (GamePickerRedirect.TryTake(waypoint))
+            {
+                return false;
+            }
             Location location = Graph.Shared.ResolveLocationString(waypoint.LocationString);
-            string coupleToCarId = waypoint.CoupleToCarId;
+            _pickedPose = QueuedPose.From(waypoint, GamePickerRedirect.PoseChosen);
+            try
+            {
+                return SetWaypointPrefix(location, waypoint.CoupleToCarId, ref ____locomotive, ref ____persistence);
+            }
+            finally
+            {
+                _pickedPose = null;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypointOrder))]
+        static bool SetWaypointOrderPrefix(AutoEngineerOrdersHelper __instance, OrderWaypoint waypoint, int? maxSpeedMph, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+            if (GamePickerRedirect.TryTake(waypoint))
+            {
+                return false;
+            }
+            __instance.SetOrdersValue(Game.Messages.AutoEngineerMode.Waypoint, null, maxSpeedMph, null, null);
+            return SetWaypointPrefix(waypoint, ref ____locomotive, ref ____persistence);
+        }
+
+        // The pose of the waypoint being added, while SetWaypointPrefix runs (the overwrite question captures it).
+        private static QueuedPose _pickedPose;
+
+        static bool SetWaypointPrefix(Location location, string coupleToCarId, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+            QueuedPose pose = _pickedPose;
+            //ModLocator.Loader.LogDebug($"SetWaypoint prefix");
 
             OrderWaypoint? existingWaypoint = ____persistence.Orders.Waypoint;
             bool isAppendingWaypoint = ModLocator.Settings.Input.appendWaypointMode.IsPressed();
@@ -27,7 +66,7 @@ namespace WaypointQueue
             bool isInsertingNext = ModLocator.Settings.Input.insertNextWaypointMode.IsPressed();
 
             bool isAnyModifierPressed = isAppendingWaypoint || isReplacingWaypoint || isInsertingNext;
-            //Loader.LogDebug($"Appending: {isAppendingWaypoint}, Replacing {isReplacingWaypoint}, Inserting {isInsertingNext}");
+            //ModLocator.Loader.LogDebug($"Appending: {isAppendingWaypoint}, Replacing {isReplacingWaypoint}, Inserting {isInsertingNext}");
 
             if (!isAnyModifierPressed && !ModLocator.Settings.UseLegacyHotkeyOptions)
             {
@@ -53,36 +92,36 @@ namespace WaypointQueue
                         if (b)
                         {
                             ModStateManager.Shared.RemoveLocoWaypointState(loco.id);
-                            HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                            HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext, pose);
                         }
                     });
                 }
                 else
                 {
                     ModStateManager.Shared.RemoveLocoWaypointState(____locomotive.id);
-                    HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                    HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext, pose);
                 }
             }
             else
             {
-                HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext, pose);
             }
 
             // Skip original since we need to manage waypoints to keep track of any orders that need to be resolved
             return false;
         }
 
-        private static void HandleAddingWaypoint(OrderWaypoint? existingWaypoint, BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacingWaypoint, bool isInsertingNext)
+        private static void HandleAddingWaypoint(OrderWaypoint? existingWaypoint, BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacingWaypoint, bool isInsertingNext, QueuedPose pose)
         {
             if (existingWaypoint != null)
             {
-                //Loader.LogDebug($"Current waypoint for {loco.Ident} is {existingWaypoint.Value.LocationString}");
+                //ModLocator.Loader.LogDebug($"Current waypoint for {loco.Ident} is {existingWaypoint.Value.LocationString}");
             }
 
             // Always add the waypoint to the queue
             if (location != null)
             {
-                WaypointQueueController.Shared.AddWaypoint(loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                WaypointQueueController.Shared.AddWaypoint(loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext, pose);
             }
         }
 

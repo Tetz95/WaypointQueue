@@ -24,7 +24,8 @@ namespace WaypointQueue.Services
         {
             ModLocator.Loader.LogDebug($"Starting search for nearby coupling in straight line");
             (Location closestTrainEndLocation, Location furthestTrainEndLocation) = carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out float closestDistance, out Car closestCar, out Car furthestCar, out _, out _);
-            Location orientedClosestTrainEnd = Graph.Shared.LocationOrientedToward(closestTrainEndLocation, furthestTrainEndLocation);
+            // Facing out of the train at its end nearest the waypoint: the search runs ahead of the train.
+            Location orientedClosestTrainEnd = Graph.Shared.LocationFacingAwayFrom(closestTrainEndLocation, furthestTrainEndLocation);
 
             float checkDistanceInterval = AverageCarLengthMeters / 2;
             float totalDistanceChecked = 0;
@@ -38,7 +39,7 @@ namespace WaypointQueue.Services
                 try
                 {
                     ModLocator.Loader.LogDebug($"Checking for coupling ahead by moving {totalDistanceChecked}");
-                    Location checkLocation = Graph.Shared.LocationByMoving(orientedClosestTrainEnd, -totalDistanceChecked, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                    Location checkLocation = Graph.Shared.LocationByMoving(orientedClosestTrainEnd, totalDistanceChecked, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
                     targetCar = trainControllerWrapper.CheckForCarAtLocation(checkLocation);
                     if (targetCar != null && !consist.Contains(targetCar))
                     {
@@ -57,7 +58,7 @@ namespace WaypointQueue.Services
                 Location bestLocation;
                 if (!targetCar[nearestEnd].IsCoupled)
                 {
-                    //Loader.Log($"Closest end of {targetCar.Ident} is available to couple");
+                    //ModLocator.Loader.Log($"Closest end of {targetCar.Ident} is available to couple");
                     bestLocation = GetCouplerLocation(targetCar, nearestEnd);
                 }
                 else
@@ -73,7 +74,7 @@ namespace WaypointQueue.Services
                 wp.OverwriteLocation(bestLocation);
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
                 ModLocator.Loader.Log($"Sending target coupling waypoint for {wp.Locomotive.Ident} to {bestLocation} with coupling to {targetCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, bestLocation, targetCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, bestLocation, targetCar, nearestEnd);
                 return true;
             }
 
@@ -91,6 +92,7 @@ namespace WaypointQueue.Services
 
             Car bestMatchCar = null;
             Location bestMatchLocation = default;
+            LogicalEnd bestMatchEnd = default;
             float bestMatchDistance = 100000;
 
             foreach (var carId in nearbyCarIds)
@@ -107,6 +109,7 @@ namespace WaypointQueue.Services
                     if (totalDistance < bestMatchDistance)
                     {
                         bestMatchCar = car;
+                        bestMatchEnd = nearestEnd;
                         bestMatchLocation = car.LocationFor(nearestEnd);
                         bestMatchDistance = totalDistance;
                     }
@@ -127,7 +130,7 @@ namespace WaypointQueue.Services
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
 
                 ModLocator.Loader.Log($"Sending nearby coupling waypoint for {wp.Locomotive.Ident} to {adjustedLocation} with coupling to {bestMatchCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, adjustedLocation, bestMatchCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, adjustedLocation, bestMatchCar, bestMatchEnd);
                 return true;
             }
 
@@ -145,6 +148,7 @@ namespace WaypointQueue.Services
             LogicalEnd nearestEnd = carService.ClosestLogicalEndTo(targetCar, waypoint.Locomotive.OpsLocation);
 
             Location bestLocation;
+            LogicalEnd coupleEnd = nearestEnd;
 
             if (!targetCar[nearestEnd].IsCoupled)
             {
@@ -154,7 +158,8 @@ namespace WaypointQueue.Services
             else if (!targetCar[carService.GetOppositeEnd(nearestEnd)].IsCoupled)
             {
                 ModLocator.Loader.Log($"Furthest end of {targetCar.Ident} is available to couple");
-                bestLocation = GetCouplerLocation(targetCar, carService.GetOppositeEnd(nearestEnd));
+                coupleEnd = carService.GetOppositeEnd(nearestEnd);
+                bestLocation = GetCouplerLocation(targetCar, coupleEnd);
             }
             else
             {
@@ -173,7 +178,7 @@ namespace WaypointQueue.Services
                 waypoint.OverwriteLocation(bestLocation);
                 WaypointQueueController.Shared.UpdateWaypoint(waypoint);
                 ModLocator.Loader.Log($"Sending target coupling waypoint for {waypoint.Locomotive.Ident} to {bestLocation} with coupling to {targetCar.Ident}");
-                autoEngineerService.SendToWaypoint(ordersHelper, bestLocation, targetCar.id);
+                autoEngineerService.SendToCouple(ordersHelper, bestLocation, targetCar, coupleEnd);
                 return true;
             }
 
@@ -185,11 +190,11 @@ namespace WaypointQueue.Services
             End carEnd = car.LogicalToEnd(logicalEnd);
             if (carEnd == End.F)
             {
-                return Graph.Shared.LocationByMoving(car.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
+                return Graph.Shared.Current.LocationByMoving(car.LocationF, 0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true);
             }
             else
             {
-                return Graph.Shared.LocationByMoving(car.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
+                return Graph.Shared.Current.LocationByMoving(car.LocationR, -0.5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true).Flipped();
             }
         }
     }

@@ -47,7 +47,9 @@ namespace WaypointQueue.Patches
                     return true;
                 }
 
-                if (waypointState.UnresolvedWaypoint?.LocationString != ordersHelper.Orders.Waypoint?.LocationString)
+                // The order carries the mark moved up to a centimetre inside its segment (AutoEngineerService.InsideSegment),
+                // so compare track positions, not the text.
+                if (!AutoEngineerService.SameMark(waypointState.UnresolvedWaypoint?.LocationString, ordersHelper.Orders.Waypoint?.LocationString))
                 {
                     ModLocator.Loader.LogDebug($"Loco {loco.Ident} unresolved waypoint to {waypointState.UnresolvedWaypoint?.LocationString} did not match {ordersHelper.Orders.Waypoint?.LocationString}");
                     return true;
@@ -80,10 +82,13 @@ namespace WaypointQueue.Patches
 
                     (Location closestTrainEnd, Location _) = carService.GetTrainEndLocations(waypointState.UnresolvedWaypoint.Locomotive, waypointState.UnresolvedWaypoint.Location, out float closestDistance, out var _, out var _, out _, out _);
 
-                    GraphRouteSearchExtension.TryFindDistance(Graph.Shared, closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance);
+                    // No route (a turntable not lined to the waypoint's stall, say): the search reports 0 m, which
+                    // matched the planner's "At waypoint" 0 m and turned its stop into running at track speed, so the
+                    // train drove off in whatever direction it faced and kept going. Only a found route counts.
+                    bool routeFound = GraphRouteSearchExtension.TryFindDistance(Graph.Shared, closestTrainEnd, waypointState.UnresolvedWaypoint.Location, out float totalDistance);
 
                     SpeedTarget t = updatedSpeedTargets[indexOfWaypoint];
-                    if (Mathf.Abs(totalDistance - t.DistanceM) < 10f)
+                    if (routeFound && Mathf.Abs(totalDistance - t.DistanceM) < 10f)
                     {
                         ModLocator.Loader.LogDebug($"Updating AE target {targetSpeedMps}mps @ {t.DistanceM}m for reason {t.Reason}");
                         updatedSpeedTargets[indexOfWaypoint] = new SpeedTarget(t.DistanceM, targetSpeedMps, t.Reason);

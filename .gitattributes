@@ -1,0 +1,6 @@
+# Files this version replaces: keep ours when upstream changes them too.
+# Needs the ours merge driver once per clone: git config merge.ours.driver true
+Info.json merge=ours
+README.md merge=ours
+WaypointQueue/WaypointQueue.csproj merge=ours
+WaypointQueue.Tests/WaypointQueue.Tests.csproj merge=ours

@@ -1,4 +1,6 @@
 ﻿using Game;
+using HarmonyLib;
+using System.Reflection;
 using Game.Messages;
 using Game.Notices;
 using Game.State;
@@ -70,7 +72,7 @@ namespace WaypointQueue
             }
         }
 
-        private void HandleProcessingError(string orderType, Exception exception, ManagedWaypoint wp)
+        internal void HandleProcessingError(string orderType, Exception exception, ManagedWaypoint wp)
         {
             ModLocator.Loader.LogError($"Exception while processing waypoint: {exception}");
             ModLocator.Loader.Log($"Waypoint configuration:\n{wp}");
@@ -269,7 +271,8 @@ namespace WaypointQueue
         private void ResolveChangeMaxSpeed(ManagedWaypoint wp)
         {
             var ordersHelper = autoEngineerService.GetOrdersHelper(wp.Locomotive);
-            int maxSpeedToSet = Mathf.Clamp(wp.MaxSpeedForChange, 0, 45);
+            // The railroad's speed limit (2026.1 lets the player set it, 5-100 mph; Legacy's was 45)
+            int maxSpeedToSet = Mathf.Clamp(wp.MaxSpeedForChange, 0, global::Model.AI.AutoEngineerOrdersExtensions.MaxSpeedMph(Game.Messages.AutoEngineerMode.Waypoint));
             ordersHelper.SetOrdersValue(null, null, maxSpeedMph: maxSpeedToSet, null, null);
         }
 
@@ -330,6 +333,7 @@ namespace WaypointQueue
             // After reaching the reposition waypoint, begin refueling with animations
             if (wp.CurrentlyRefueling && !wp.RefuelLoaderAnimated && Mathf.Floor(wp.Locomotive.VelocityMphAbs) == 0)
             {
+                refuelService.LogSlotAlignment(wp);
                 refuelService.SetCarLoaderSequencerWantsLoading(wp, true);
                 wp.RefuelLoaderAnimated = true;
                 wp.StatusLabel = $"Refueling {RefuelService.GetLabelForLoadId(wp.RefuelLoadId)}";
@@ -404,7 +408,7 @@ namespace WaypointQueue
                 }
                 else
                 {
-                    //Loader.LogDebug($"Still refueling");
+                    //ModLocator.Loader.LogDebug($"Still refueling");
                     return false;
                 }
             }
@@ -480,7 +484,11 @@ namespace WaypointQueue
 
         private BaseLocomotive GetNextLocomotiveForRefuel(ManagedWaypoint waypoint)
         {
-            return carService.GetLocoById(waypoint.RefuelLocoIdsQueue.FirstOrDefault());
+            if (waypoint.RefuelLocoIdsQueue.Count == 0)
+            {
+                return null;
+            }
+            return carService.GetLocoById(waypoint.RefuelLocoIdsQueue.First());
         }
 
         internal bool IsTrainStopped(ManagedWaypoint wp)
@@ -488,7 +496,7 @@ namespace WaypointQueue
             List<Car> coupled = [.. wp.Locomotive.EnumerateCoupled()];
             Car firstCar = coupled.First();
             Car lastCar = coupled.Last();
-            //Loader.LogDebug($"First car {firstCar.Ident} is {(firstCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")} and last car {lastCar.Ident} is {(lastCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")}");
+            //ModLocator.Loader.LogDebug($"First car {firstCar.Ident} is {(firstCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")} and last car {lastCar.Ident} is {(lastCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")}");
 
             return firstCar.IsStopped(2) && lastCar.IsStopped(2);
         }
@@ -502,7 +510,7 @@ namespace WaypointQueue
                 WaypointQueueController.Shared.UpdateWaypoint(wp);
                 return true;
             }
-            //Loader.LogDebug($"Loco {wp.Locomotive.Ident} still waiting");
+            //ModLocator.Loader.LogDebug($"Loco {wp.Locomotive.Ident} still waiting");
             return false;
         }
 
@@ -549,23 +557,172 @@ namespace WaypointQueue
             return false;
         }
 
-        private bool OrderClearBeyondWaypoint(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper)
+        // Send past waypoint without stopping: once the train is this close, it is sent on to the point that clears the
+        // waypoint. Ordered only on arrival, the game's own stop at the waypoint and a stop within one train length
+        // braked the train almost to a stand short of the waypoint before it crept on to the clear point.
+        internal const float ClearBeyondLeadDistance = 400f;
+
+        private static readonly bool NativeSendPast = true;
+
+        internal bool TryOrderClearBeyondEarly(ManagedWaypoint wp, AutoEngineerOrdersHelper ordersHelper)
+        {
+            // 2026.1 sends the train past with a pose when the waypoint is sent (WaypointQueueController).
+            if (NativeSendPast)
+            {
+                return false;
+            }
+            if (wp.StopAtWaypoint || !wp.MoveTrainPastWaypoint || wp.HasAnyCouplingOrders || wp.WaitingWasSkipped)
+            {
+                return false;
+            }
+            carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out float closestDistance, out _, out _, out _, out _);
+            if (closestDistance > ClearBeyondLeadDistance)
+            {
+                return false;
+            }
+            // Only on the last leg: with a turn-back still ahead (a train reversing out before it heads for the
+            // waypoint) the train's far end can be on the wrong side, and "past" came out the wrong way.
+            if (!TryGetLastLegApproach(wp, out Vector3 approachFrom))
+            {
+                return false;
+            }
+            // The point past the waypoint is reached by the auto engineer's own best route, which need not run through the
+            // waypoint: past a yard track's far end it can lie on the main, and the train then stayed on the main and never
+            // took the yard track. Ordered early only when that route still runs over the waypoint's track; otherwise the
+            // train runs to the waypoint itself and is sent past on arrival.
+            Location clearPoint;
+            try
+            {
+                clearPoint = ClearPoint(wp, approachFrom);
+            }
+            catch (Exception)
+            {
+                return false;                                      // doesn't fit past: reported on arrival as before
+            }
+            if (!RouteRunsOverWaypoint(wp, clearPoint))
+            {
+                ModLocator.Loader.LogDebug($"{wp.Locomotive.Ident}: the best route past the waypoint doesn't run over it; sending past on arrival");
+                return false;
+            }
+            ModLocator.Loader.Log($"{wp.Locomotive.Ident} is on its last approach to the waypoint ({closestDistance:F0} m); sending it past now");
+            try
+            {
+                return OrderClearBeyondWaypoint(wp, ordersHelper, approachFrom);
+            }
+            catch (WaypointProcessingException e)
+            {
+                HandleProcessingError("Move past waypoint", e, wp);
+                return false;
+            }
+        }
+
+        private static readonly MethodInfo PlannerRouteStart = AccessTools.Method(typeof(AutoEngineerPlanner), "RouteStartLocation", [typeof(float).MakeByRefType()]);
+
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, float> PlannerMaximumLength =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, float>("_maximumLength");
+
+        // The game's own route search (as the auto engineer will run it) from where the train is now to the point past the
+        // waypoint: does it run over the waypoint's track segment? When in doubt, no (send past on arrival).
+        internal static bool RouteRunsOverWaypoint(ManagedWaypoint wp, Location clearPoint)
+        {
+            try
+            {
+                AutoEngineerPlanner planner = (wp.Locomotive as BaseLocomotive)?.AutoEngineerPlanner;
+                TrackSegment segment = wp.Location.segment;
+                if (planner == null || segment == null || PlannerRouteStart == null)
+                {
+                    return false;
+                }
+                if (clearPoint.segment == segment)
+                {
+                    return true;
+                }
+                object[] args = { 0f };
+                Location start = (Location)PlannerRouteStart.Invoke(planner, args);
+                var steps = new List<Track.Search.RouteSearch.Step>();
+                if (!Track.Search.RouteSearch.FindRoute(Graph.Shared.Current, start, clearPoint, Track.Search.HeuristicCosts.AutoEngineer, steps, out _,
+                        checkForCars: false, PlannerMaximumLength(planner), (float)args[0]))
+                {
+                    return false;
+                }
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    if (steps[i].Location.segment == segment)
+                    {
+                        return true;
+                    }
+                    if (i > 0 && steps[i].Node != null && steps[i - 1].Node != null
+                        && (steps[i].Node == segment.a && steps[i - 1].Node == segment.b || steps[i].Node == segment.b && steps[i - 1].Node == segment.a))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, List<Track.Search.RouteSearch.Step>> PlannerRoute =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, List<Track.Search.RouteSearch.Step>>("_route");
+
+        private static readonly AccessTools.FieldRef<AutoEngineerPlanner, int> PlannerStartStep =
+            AccessTools.FieldRefAccess<AutoEngineerPlanner, int>("_startStepIndex");
+
+        // False while the auto engineer's route to the waypoint still turns back. Otherwise the point the train comes
+        // from on its last approach (the route's last step before the waypoint, or the train's end nearest the
+        // waypoint), which sets which way is past the waypoint.
+        private bool TryGetLastLegApproach(ManagedWaypoint wp, out Vector3 approachFrom)
+        {
+            approachFrom = default;
+            AutoEngineerPlanner planner = (wp.Locomotive as BaseLocomotive)?.AutoEngineerPlanner;
+            List<Track.Search.RouteSearch.Step> route = planner == null ? null : PlannerRoute(planner);
+            if (route == null || route.Count == 0)
+            {
+                return false;
+            }
+            // The route to this waypoint, not the one before it: the game finds a new route a moment after the waypoint
+            // is sent, and until then still holds the old one.
+            Vector3 waypointAt = Graph.Shared.GetPosition(wp.Location);
+            if (Vector3.Distance(route[route.Count - 1].Position, waypointAt) > 2f)
+            {
+                return false;
+            }
+            int start = Math.Max(0, PlannerStartStep(planner));
+            for (int i = start + 1; i < route.Count; i++)
+            {
+                if (route[i].Direction != route[i - 1].Direction)
+                {
+                    return false;
+                }
+            }
+            for (int i = route.Count - 2; i >= start; i--)
+            {
+                Vector3 position = route[i].Position;
+                if (Vector3.Distance(position, waypointAt) > 2f)
+                {
+                    approachFrom = position;
+                    return true;
+                }
+            }
+            (Location closest, _) = carService.GetTrainEndLocations(wp.Locomotive, wp.Location, out _, out _, out _, out _, out _);
+            approachFrom = Graph.Shared.GetPosition(closest);
+            return Vector3.Distance(approachFrom, waypointAt) > 2f;
+        }
+
+        private bool OrderClearBeyondWaypoint(ManagedWaypoint waypoint, AutoEngineerOrdersHelper ordersHelper, Vector3? approachFrom = null)
         {
             waypoint.StopAtWaypoint = true;
             waypoint.MoveTrainPastWaypoint = false;
 
             ModLocator.Loader.Log($"Beginning order to clear {waypoint.Locomotive.Ident} train past the waypoint");
-            (_, Location furthestCarLocation) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out _, out _, out _, out _, out _);
-
-            float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
-
-            Location orientedLocation = Graph.Shared.LocationOrientedToward(waypoint.Location, furthestCarLocation);
             Location locationToMove;
 
             try
             {
-                locationToMove = Graph.Shared.LocationByMoving(orientedLocation, -totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
-                locationToMove.AssertValid();
+                locationToMove = ClearPoint(waypoint, approachFrom);
             }
             catch (Exception e)
             {
@@ -582,8 +739,32 @@ namespace WaypointQueue
             return true;
         }
 
+        // One train length past the waypoint. Past is away from where the train comes from: its far end on arrival, or
+        // (ordered on the approach) the route's point before the waypoint, so where the train stands on the way in
+        // doesn't matter. Throws when the train doesn't fit past.
+        private Location ClearPoint(ManagedWaypoint waypoint, Vector3? approachFrom)
+        {
+            (_, Location furthestCarLocation) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out _, out _, out _, out _, out _);
+            float totalTrainLength = GetTrainLength(waypoint.Locomotive as BaseLocomotive);
+            Location orientedLocation = approachFrom.HasValue
+                ? OrientedAwayFrom(waypoint.Location, approachFrom.Value)
+                : Graph.Shared.LocationFacingAwayFrom(waypoint.Location, furthestCarLocation);
+            Location location = Graph.Shared.Current.LocationByMoving(orientedLocation, totalTrainLength, checkSwitchAgainstMovement: false, stopAtEndOfTrack: false);
+            location.AssertValid();
+            return location;
+        }
+
+        private static Location OrientedAwayFrom(Location location, Vector3 point)
+        {
+            Graph graph = Graph.Shared;
+            Vector3 ahead = graph.GetPosition(graph.LocationByMoving(location, 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            Vector3 behind = graph.GetPosition(graph.LocationByMoving(location.Flipped(), 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            return Vector3.Distance(ahead, point) >= Vector3.Distance(behind, point) ? location : location.Flipped();
+        }
+
         private float GetTrainLength(BaseLocomotive locomotive)
         {
+            // 2026.1: a public static over the given cars.
             return AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
         }
 
@@ -634,6 +815,14 @@ namespace WaypointQueue
             {
                 carsToCut = isPickup
                     ? uncouplingService.FindPickupByDestination(waypoint, carCoupledTo) : uncouplingService.FindDropoffByDestination(waypoint, carCoupledTo);
+
+                if (!isPickup && carsToCut.Count == 0)
+                {
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to drop off for {DescribeUncoupleDestination(waypoint)}, so it will remain coupled to all cars.";
+                    Console.Log(message);
+                    ModLocator.Loader.Log(message);
+                    return;
+                }
             }
 
             if (waypoint.WillUncoupleBySpecificCar)
@@ -666,6 +855,11 @@ namespace WaypointQueue
             uncouplingService.PerformCut(carsToCut, waypoint);
         }
 
+        private static string DescribeUncoupleDestination(ManagedWaypoint waypoint)
+        {
+            return string.IsNullOrEmpty(waypoint.DestinationSearchText) ? waypoint.UncoupleDestinationId : waypoint.DestinationSearchText;
+        }
+
         private void ResolveUncouplingOrders(ManagedWaypoint waypoint)
         {
             ModLocator.Loader.Log($"Resolving uncoupling orders for {waypoint.Locomotive.Ident}");
@@ -678,6 +872,14 @@ namespace WaypointQueue
             if (waypoint.WillUncoupleByDestination && !string.IsNullOrEmpty(waypoint.UncoupleDestinationId))
             {
                 carsToCut = uncouplingService.FindCutByDestination(waypoint);
+
+                if (carsToCut.Count == 0)
+                {
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to cut for {DescribeUncoupleDestination(waypoint)}, so no cars were uncoupled.";
+                    Console.Log(message);
+                    ModLocator.Loader.Log(message);
+                    return;
+                }
             }
 
             if (waypoint.WillUncoupleBySpecificCar)

@@ -5,6 +5,7 @@ using Model.Ops;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Track;
 using UnityEngine;
@@ -119,6 +120,10 @@ namespace WaypointQueue
 
         [JsonProperty]
         public string LocationString { get; private set; }
+
+        // Railroader 2026.1: how the train should stand at the waypoint (see QueuedPose); null for any way it arrives.
+        [JsonProperty]
+        public QueuedPose Pose { get; set; }
 
         private Location _location;
 
@@ -494,9 +499,9 @@ namespace WaypointQueue
 
             try
             {
-                TrainController.Shared.TryGetCarForId(CoupleToCarId, out car);
+                bool found = TrainController.Shared.TryGetCarForId(CoupleToCarId, out car);
                 CoupleToCar = car;
-                return true;
+                return found && car != null;
             }
             catch (Exception e)
             {
@@ -632,6 +637,7 @@ namespace WaypointQueue
                 copy = ManagedWaypoint.FromPropertyValue(this.ToPropertyValue());
                 copy.Id = Guid.NewGuid().ToString();
                 copy.LocomotiveId = loco?.id ?? null;
+                copy.ResetProgress();
                 return true;
             }
             else
@@ -639,6 +645,44 @@ namespace WaypointQueue
                 copy = null;
                 return false;
             }
+        }
+
+        // Clears the state of a waypoint that is being worked on, so a copy starts fresh instead of
+        // resuming a wait, refuel or coupling that belongs to the original.
+        private void ResetProgress()
+        {
+            CurrentlyWaiting = false;
+            WaitingWasSkipped = false;
+            WaitUntilGameTotalSeconds = 0;
+            CurrentlyRefueling = false;
+            RefuelLocoIdsQueue = [];
+            RepositioningToRetryRefuel = false;
+            HasResolvedBrakeSystemOnCouple = false;
+            CurrentlyCouplingNearby = false;
+            CurrentlyCouplingSpecificCar = false;
+            CurrentlyWaitingBeforeCutting = false;
+            StatusLabel = "Inactive";
+            Errors = [];
+        }
+
+        // Doubles stored as strings are written culture-invariant, so a save written on a machine with
+        // a comma decimal separator reads back the same everywhere.
+        internal static string FormatStoredDouble(double value)
+        {
+            return value.ToString("R", CultureInfo.InvariantCulture);
+        }
+
+        // Older versions wrote these with the machine's culture and double.ToString(), which never adds
+        // group separators, so a comma with no period is a decimal separator.
+        internal static double ParseStoredDouble(string value)
+        {
+            if (String.IsNullOrEmpty(value))
+                return 0;
+
+            if (value.IndexOf(',') >= 0 && value.IndexOf('.') < 0)
+                value = value.Replace(',', '.');
+
+            return double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
         }
 
         public override string ToString()
@@ -705,6 +749,7 @@ namespace WaypointQueue
                    UncoupleDestinationId == other.UncoupleDestinationId &&
                    ExcludeMatchingCarsFromCut == other.ExcludeMatchingCarsFromCut &&
                    MoveTrainPastWaypoint == other.MoveTrainPastWaypoint &&
+                   (Pose?.SameAs(other.Pose) ?? other.Pose == null || other.Pose.IsEmpty) &&
                    CurrentlyWaitingBeforeCutting == other.CurrentlyWaitingBeforeCutting &&
                    StatusLabel == other.StatusLabel &&
                    Name == other.Name &&
@@ -758,7 +803,7 @@ namespace WaypointQueue
                 [ValueKeys.WaitUntilTimeString] = Value.String(WaitUntilTimeString),
                 [ValueKeys.WaitUntilDay] = Value.Int((int)WaitUntilDay),
                 [ValueKeys.WaitForDurationMinutes] = Value.Int(WaitForDurationMinutes),
-                [ValueKeys.WaitUntilGameTotalSeconds] = Value.String(WaitUntilGameTotalSeconds.ToString()),
+                [ValueKeys.WaitUntilGameTotalSeconds] = Value.String(FormatStoredDouble(WaitUntilGameTotalSeconds)),
                 [ValueKeys.StopAtWaypoint] = Value.Bool(StopAtWaypoint),
                 [ValueKeys.WillLimitPassingSpeed] = Value.Bool(WillLimitPassingSpeed),
                 [ValueKeys.WaypointTargetSpeed] = Value.Int(WaypointTargetSpeed),
@@ -781,6 +826,10 @@ namespace WaypointQueue
                 [ValueKeys.StatusLabel] = Value.String(StatusLabel),
                 [ValueKeys.Errors] = Value.Array(Errors.Select(e => e.ToPropertyValue()).ToList()),
             };
+            if (Pose != null && !Pose.IsEmpty)
+            {
+                dictionary[ValueKeys.Pose] = Pose.ToPropertyValue();
+            }
             return Value.Dictionary(dictionary.ToDictionary(k => k.Key, v => v.Value));
         }
 
@@ -824,7 +873,7 @@ namespace WaypointQueue
             waypoint.WaitUntilTimeString = dict[ValueKeys.WaitUntilTimeString].StringValue;
             waypoint.WaitUntilDay = (TodayOrTomorrow)dict[ValueKeys.WaitUntilDay].IntValue;
             waypoint.WaitForDurationMinutes = dict[ValueKeys.WaitForDurationMinutes].IntValue;
-            waypoint.WaitUntilGameTotalSeconds = Convert.ToDouble(dict[ValueKeys.WaitUntilGameTotalSeconds].StringValue);
+            waypoint.WaitUntilGameTotalSeconds = ParseStoredDouble(dict[ValueKeys.WaitUntilGameTotalSeconds].StringValue);
             waypoint.StopAtWaypoint = dict[ValueKeys.StopAtWaypoint].BoolValue;
             waypoint.WillLimitPassingSpeed = dict[ValueKeys.WillLimitPassingSpeed].BoolValue;
             waypoint.WaypointTargetSpeed = dict[ValueKeys.WaypointTargetSpeed].IntValue;
@@ -846,6 +895,7 @@ namespace WaypointQueue
             waypoint.CurrentlyWaitingBeforeCutting = dict[ValueKeys.CurrentlyWaitingBeforeCutting].BoolValue; ;
             waypoint.StatusLabel = dict[ValueKeys.StatusLabel].StringValue;
             waypoint.Errors = [.. dict[ValueKeys.Errors].ArrayValue.ToList().Select(e => WaypointError.FromPropertyValue(e))];
+            waypoint.Pose = dict.TryGetValue(ValueKeys.Pose, out Value pose) ? QueuedPose.FromPropertyValue(pose) : null;
 
             if (dict.ContainsKey(ValueKeys.EnableMultipleRefueling))
             {
@@ -940,6 +990,7 @@ namespace WaypointQueue
             internal static string CurrentlyWaitingBeforeCutting = "currently_waiting_before_cutting";
             internal static string StatusLabel = "status_label";
             internal static string Errors = "errors";
+            internal static string Pose = "pose";
         }
     }
 

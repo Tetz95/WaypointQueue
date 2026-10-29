@@ -405,6 +405,8 @@ namespace WaypointQueue.UI
                     BuildSendPastWaypointField(waypoint, row, onWaypointChange);
                 });
 
+                BuildPoseField(waypoint, builder, isRouteWindow);
+
                 if (!waypoint.StopAtWaypoint && !waypoint.IsCoupling)
                 {
                     BuildPassingSpeedLimitField(waypoint, builder, onWaypointChange);
@@ -541,6 +543,10 @@ namespace WaypointQueue.UI
                 {
                     ErrorModalController.Shared.ShowProcessingErrorModal(error.Message, error.ErrorType, waypoint);
                 });
+                field.AddButton("Resume", () =>
+                {
+                    WaypointQueueController.Shared.ResumeWaypoint(waypoint);
+                });
             }));
         }
 
@@ -620,6 +626,7 @@ namespace WaypointQueue.UI
             var editNameAndNotesRow = new DropdownMenu.RowData("Edit name and notes", "");
             var removeWaitRow = new DropdownMenu.RowData("Remove wait", "");
             var deleteWaypointRow = new DropdownMenu.RowData("Delete", "");
+            var clearPoseRow = new DropdownMenu.RowData("Clear train position", "Lets the train stand however it arrives");
 
             // Ordering
             options.Add(jumpToWaypointRow);
@@ -640,6 +647,10 @@ namespace WaypointQueue.UI
             if (waypoint.WillWait)
             {
                 options.Add(removeWaitRow);
+            }
+            if (waypoint.Pose != null && waypoint.Pose.IsPosed)
+            {
+                options.Add(clearPoseRow);
             }
             options.Add(deleteWaypointRow);
 
@@ -664,6 +675,12 @@ namespace WaypointQueue.UI
                 if (value == options.IndexOf(adjustWaypointRow))
                 {
                     WaypointPicker.Shared.StartAdjustingWaypoint(waypoint, onWaypointChange, isRouteWindow);
+                }
+
+                if (options.Contains(clearPoseRow) && value == options.IndexOf(clearPoseRow))
+                {
+                    waypoint.Pose = null;
+                    onWaypointChange(waypoint);
                 }
 
                 if (value == options.IndexOf(removeCouplingRow))
@@ -879,6 +896,19 @@ namespace WaypointQueue.UI
             return builder;
         }
 
+        // How the train will stand at the waypoint, as chosen in the game's picker (Space while picking).
+        private void BuildPoseField(ManagedWaypoint waypoint, UIPanelBuilder builder, bool isRouteWindow)
+        {
+            BaseLocomotive locomotive = isRouteWindow ? TrainController.Shared.SelectedLocomotive : waypoint.Locomotive;
+            string description = waypoint.Pose?.Describe(locomotive, waypoint.Location);
+            if (description == null)
+            {
+                return;
+            }
+            var poseField = builder.AddField("Train stands", builder.AddLabel(description));
+            AddLabelOnlyTooltip(poseField, "Train stands", "How the train will stand at the waypoint, chosen with Space while picking it. If cars are picked up or set out before this waypoint, the same position is planned for the train as it is then.\n\nTo change it, adjust the waypoint and pick again; to let the train stand however it arrives, choose Clear train position.");
+        }
+
         private UIPanelBuilder BuildSendPastWaypointField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
         {
             var sendPastWaypointField = builder.AddField("Send past waypoint", builder.AddToggle(() => waypoint.MoveTrainPastWaypoint, (bool value) =>
@@ -931,8 +961,7 @@ namespace WaypointQueue.UI
                 AddConnectAirAndReleaseBrakeToggles(waypoint, builder, onWaypointChange);
             });
 
-
-            return builder;
+return builder;
         }
 
         private UIPanelBuilder BuildUncouplingModeField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
@@ -951,7 +980,7 @@ namespace WaypointQueue.UI
 
                 By specific car - Choose a specific car to uncouple and which direction to cut the consist.
 
-                All except locomotives - Uncouples all cars except locomotives and tenders.
+                All except locomotives - Uncouples all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are cut with the cars.
                 """;
 
             if (waypoint.WillPostCoupleCutPickup)
@@ -990,7 +1019,7 @@ namespace WaypointQueue.UI
                 
                 By specific car - Choose a specific car to dropoff.
                 
-                All except locomotives - Dropoff all cars except locomotives and tenders.
+                All except locomotives - Dropoff all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are dropped with the cars.
                 """;
             }
 
@@ -1001,8 +1030,7 @@ namespace WaypointQueue.UI
                     onWaypointChange(waypoint);
                 }));
 
-
-            AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeTooltip);
+AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeTooltip);
             return builder;
         }
 
@@ -1516,8 +1544,7 @@ namespace WaypointQueue.UI
                 }));
             });
 
-
-            if (waypoint.WillRefuel)
+if (waypoint.WillRefuel)
             {
                 var refuelSpeedLimitField = builder.AddField($"Refuel speed limit", builder.HStack((UIPanelBuilder field) =>
                 {
@@ -1534,7 +1561,7 @@ namespace WaypointQueue.UI
                     {
                         waypoint.RefuelingSpeedLimit += GetOffsetAmount();
                         onWaypointChange(waypoint);
-                    }).Width(24f).Disable(waypoint.RefuelingSpeedLimit >= 45);
+                    }).Width(24f).Disable(waypoint.RefuelingSpeedLimit >= global::Model.AI.AutoEngineerOrdersExtensions.MaxSpeedMph(Game.Messages.AutoEngineerMode.Waypoint));
                 }));
 
                 AddLabelOnlyTooltip(refuelSpeedLimitField, "Refuel speed limit", "The engineer will temporarily be restricted to this speed limit while repositioning the locomotive to refuel." +
@@ -1839,7 +1866,7 @@ namespace WaypointQueue.UI
                         values.Add(t.Name);   // value = symbol
                     }
 
-                    //Loader.LogDebug($"[TimetableSymbolDropdown] Loaded {sortedTrains.Count} symbols from TimetableController.Current.");
+                    //ModLocator.Loader.LogDebug($"[TimetableSymbolDropdown] Loaded {sortedTrains.Count} symbols from TimetableController.Current.");
                 }
                 else
                 {
@@ -1866,7 +1893,9 @@ namespace WaypointQueue.UI
             ModLocator.Loader.LogDebug($"Building track destination options for {waypoint.Id}");
             List<DropdownOption> options = [new DropdownOption("Select a destination", ""), new DropdownOption(WaypointResolver.NoDestinationString, WaypointResolver.NoDestinationString)];
 
-            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_carPositionLookup").GetValue<Dictionary<string, OpsCarPosition>>();
+            // 2026.1 keeps the industry components by identifier instead of a car position table.
+            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_industryComponentLookup").GetValue<Dictionary<string, IndustryComponent>>()
+                .ToDictionary(kv => kv.Key, kv => (OpsCarPosition)kv.Value);
 
             string filter = waypoint.DestinationSearchText?.Trim().ToLower() ?? "";
 
