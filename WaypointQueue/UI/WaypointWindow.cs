@@ -84,6 +84,13 @@ namespace WaypointQueue.UI
             {
                 _coroutine = StartCoroutine(Ticker());
             }
+
+            // Queue changes aren't drawn while the window is closed (the update events skip a hidden window), so it
+            // showed the queue as it was when last closed.
+            if (IsVisible)
+            {
+                RebuildWithScroll();
+            }
         }
 
         protected void Awake()
