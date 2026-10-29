@@ -670,7 +670,8 @@ namespace WaypointQueue
             }
             else
             {
-                Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
+                string poseText = pose == null || pose.IsEmpty ? "no pose" : $"pose end {pose.ArrivingEnd} side {pose.BodyToward} length {pose.BodyLength:0} m, {(pose.Turns?.Length ?? 0) / 3} turn(s)";
+                Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location} ({poseText})");
                 _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
             }
 
