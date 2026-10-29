@@ -11,11 +11,11 @@ What the fork adds:
 - **Non-stop waypoints** are reached along the track (not in a straight line) and hand over to the next waypoint before the engineer brakes for them; no route no longer turns the stop into running at track speed.
 - **Refuelling** counts a slot full at the game's own capacity (coal is limited by volume), lines the slot up with a posed waypoint and finds modded loaders built after load.
 
-Download: [Releases](https://github.com/Tetz95/WaypointQueue/releases) (`WaypointQueue (Tetz fork).zip`; install it with your mod manager or unpack it into the game's `Mods` folder). It loads as its own mod (`tetz95/waypoint-queue`) and is incompatible with the original (`princeofpluto/waypointqueue`): install one or the other.
+Download: [Releases](https://github.com/Tetz95/WaypointQueue/releases) (`WaypointQueue.Tetz.fork.zip`; install it with your mod manager or unpack it into the game's `Mods` folder). It loads as its own mod (`tetz95/waypoint-queue`) and is incompatible with the original (`princeofpluto/waypointqueue`): install one or the other.
 
 Building: the projects are SDK-style, so `dotnet build WaypointQueue/WaypointQueue.csproj` builds without Visual Studio. In `Paths.user` set `RrInstallDir` (the game folder) and `RrHomeDir` (the folder whose `Mods` the build installs into); `-p:NoInstall=true` builds into `bin\` instead. The Legacy (2025.1) version of these fixes is on the `tetz-legacy` branch.
 
-Releasing: set the version in `WaypointQueue/Properties/AssemblyInfo.cs` (his release, then our build number: `2.0.0.1`), build with `dotnet build WaypointQueue/WaypointQueue.csproj -c Release -p:NoInstall=true -o <out>`, package with `python tools/package.py . <out> "WaypointQueue (Tetz fork).zip"` (one top folder `WaypointQueue`; Info.json gets the first three version numbers), tag `v<version>` on `tetz` and attach the zip to a GitHub release as `WaypointQueue (Tetz fork).zip`.
+Releasing: set the version in `WaypointQueue/Properties/AssemblyInfo.cs` (his release, then our build number: `2.0.0.1`), build with `dotnet build WaypointQueue/WaypointQueue.csproj -c Release -p:NoInstall=true -o <out>`, package with `python tools/package.py . <out> "WaypointQueue (Tetz fork).zip"` (one top folder `WaypointQueue`; Info.json gets the first three version numbers), tag `v<version>` on `tetz` and attach the zip to a GitHub release as `WaypointQueue (Tetz fork).zip` (GitHub names it `WaypointQueue.Tetz.fork.zip`; keep the name so mod managers offer to replace the old version).
 
 ---
 
