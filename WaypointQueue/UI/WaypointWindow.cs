@@ -77,6 +77,13 @@ namespace WaypointQueue.UI
             {
                 _customWindow = WindowManager.Shared.GetCustomWindow(WindowIdentifier);
             }
+
+            // The game opens the window through here (button, hotkey), not Show(): without the ticker the window kept
+            // showing the first locomotive's queue after another one was selected.
+            if (_coroutine == null)
+            {
+                _coroutine = StartCoroutine(Ticker());
+            }
         }
 
         protected void Awake()
@@ -187,6 +194,10 @@ namespace WaypointQueue.UI
 
         private void Tick()
         {
+            if (!IsVisible)
+            {
+                return;
+            }
             if (TrainController.Shared.SelectedLocomotive?.id != _selectedLocomotiveId)
             {
                 if (TrainController.Shared.SelectedLocomotive == null)
