@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.Pool;
 using WaypointQueue.Model;
 using WaypointQueue.Services;
+using WaypointQueue.State;
 using WaypointQueue.UUM;
 
 namespace WaypointQueue.UI
@@ -202,6 +203,14 @@ namespace WaypointQueue.UI
         private bool UseGamePicker(BaseLocomotive locomotive)
         {
             Action<Location, string> onSelected = _onWaypointSelected;
+            // A moved or inserted waypoint is driven with the train as it will be at its place in the queue; a route
+            // waypoint has no train to predict.
+            int index = -1;
+            if (!_forRoute && _waypoint != null && locomotive != null)
+            {
+                index = ModStateManager.Shared.GetLocoWaypointState(locomotive.id)?.Waypoints?.FindIndex(w => w.Id == _waypoint.Id) ?? -1;
+            }
+            PredictedPickerTrain.SetNext(locomotive, index);
             return GamePickerRedirect.Start(locomotive, (location, coupleToCarId, pose) =>
             {
                 _pickedPose = pose;
