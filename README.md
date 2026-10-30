@@ -1,6 +1,6 @@
 # Waypoint Queue (Tetz fork)
 
-This branch (`tetz`) is Tetz95's fork of [PrinceOfPluto's Waypoint Queue](https://github.com/PrinceOfPluto/WaypointQueue) for Railroader 2026.1 (0.6.1 or later), built on his 2.0.1. `main` stays a copy of his `main`. The original is MIT-licensed; its [LICENSE.txt](LICENSE.txt) applies to this fork too.
+This branch (`tetz`) is Tetz95's fork of [PrinceOfPluto's Waypoint Queue](https://github.com/PrinceOfPluto/WaypointQueue) for Railroader 2026.1 (0.6.1 or later), built on his 2.0.2. `main` stays a copy of his `main`. The original is MIT-licensed; its [LICENSE.txt](LICENSE.txt) applies to this fork too.
 
 What the fork adds:
 - **Train poses kept through the queue.** The pose chosen in the game's waypoint picker (Space: which end of the train stands on the mark, and on which side) is kept for queued waypoints and sent with them; the Waypoints window shows how the train will stand. *Send past waypoint* goes out as the game's "train past the mark" pose.
