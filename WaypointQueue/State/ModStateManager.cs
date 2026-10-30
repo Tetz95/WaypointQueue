@@ -152,6 +152,12 @@ namespace WaypointQueue.State
 
         private void OnPropertiesDidRestore(PropertiesDidRestore evt)
         {
+            // The map editor restores properties without a game load, so the storages were never set up
+            if (_waypointModStorage == null || _queueStateStorage == null || _routeStorage == null)
+            {
+                return;
+            }
+
             _refuelService.RebuildCollections();
 
             using (StateManager.TransactionScope())
