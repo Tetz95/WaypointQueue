@@ -1,6 +1,6 @@
 {
     "identifier": "tetz95/waypoint-queue",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "name": "Waypoint Queue (Tetz fork)",
     "author": "PrinceOfPluto, Tetz95",
     "description": "Expands AE waypoint mode to support multiple waypoints, complex switching orders, brake management, refueling, and more. Tetz95's fork of PrinceOfPluto's Waypoint Queue: keeps the train's pose through the queue and shows the train as it will be at each waypoint, with fixes for switches, coupling, cutting and refueling.",
@@ -9,7 +9,7 @@
     "assemblies": [ "WaypointQueue.dll" ],
     "dependencies": {
         "required": [
-            "rr/game >=0.6.0"
+            "rr/game >=0.6.1"
         ],
         "incompatible": [
             "princeofpluto/waypointqueue"

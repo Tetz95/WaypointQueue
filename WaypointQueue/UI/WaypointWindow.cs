@@ -35,7 +35,7 @@ namespace WaypointQueue.UI
 
         public static Window.Position DefaultPosition => Window.Position.LowerRight;
 
-        public Window.Sizing Sizing => Window.Sizing.Resizable(DefaultSize, new Vector2Int(650, Screen.height));
+        public static Vector2Int DefaultMaxSize => new Vector2Int(650, Screen.height);
 
         public static WaypointWindow Shared { get; private set; }
 
@@ -63,7 +63,7 @@ namespace WaypointQueue.UI
             {
                 Title = Title,
                 Identifier = WindowIdentifier,
-                Config = WindowConfig.Resizable(DefaultSize, DefaultSize, Window.Position.LowerRight),
+                Config = WindowConfig.Resizable(DefaultSize, DefaultSize, DefaultMaxSize, DefaultPosition),
                 BuilderAction = Populate
             };
             WindowManager.Shared.RegisterCustomWindow(waypointWindowDef);
@@ -71,18 +71,18 @@ namespace WaypointQueue.UI
 
         public void Toggle()
         {
-            WindowManager.Shared.ToggleWindow(WindowIdentifier);
+            if (WindowManager.Shared.IsWindowOpen(WindowIdentifier))
+            {
+                Hide();
+            }
+            else
+            {
+                Show();
+            }
 
             if (_customWindow == null)
             {
                 _customWindow = WindowManager.Shared.GetCustomWindow(WindowIdentifier);
-            }
-
-            // The game opens the window through here (button, hotkey), not Show(): without the ticker the window kept
-            // showing the first locomotive's queue after another one was selected.
-            if (_coroutine == null)
-            {
-                _coroutine = StartCoroutine(Ticker());
             }
 
             // Queue changes aren't drawn while the window is closed (the update events skip a hidden window), so it
@@ -156,6 +156,12 @@ namespace WaypointQueue.UI
 
         private void RebuildWithScroll()
         {
+            if (_customWindow == null)
+            {
+                ModLocator.Loader.LogError("Cannot RebuildWithScroll on WaypointWindow with a null custom window");
+                return;
+            }
+
             ScrollRect scrollRect = _customWindow.Window.contentRectTransform.GetComponentInChildren<ScrollRect>();
             bool setScrollOnNextUpdate = false;
             if (scrollRect != null)
@@ -174,6 +180,12 @@ namespace WaypointQueue.UI
 
         private void ScrollToBottom()
         {
+            if (_customWindow == null)
+            {
+                ModLocator.Loader.LogError("Cannot ScrollToBottom on WaypointWindow with a null custom window");
+                return;
+            }
+
             ScrollRect scrollRect = _customWindow.Window.contentRectTransform.GetComponentInChildren<ScrollRect>();
             if (scrollRect == null) return;
             LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
@@ -219,9 +231,7 @@ namespace WaypointQueue.UI
         public void Show()
         {
             ModLocator.Loader.LogDebug($"Rebuilding and showing waypoint panel");
-            RebuildWithScroll();
-            WindowPersistence.SetInitialPositionSize(_customWindow.Window, WindowIdentifier, DefaultSize, DefaultPosition, Sizing);
-            _customWindow.Window.ShowWindow();
+            WindowManager.Shared.ShowWindow(WindowIdentifier);
 
             if (_coroutine == null)
             {
@@ -232,7 +242,7 @@ namespace WaypointQueue.UI
 
         public void Hide()
         {
-            _customWindow.Window.CloseWindow();
+            WindowManager.Shared.CloseWindow(WindowIdentifier);
 
             if (_coroutine != null)
             {

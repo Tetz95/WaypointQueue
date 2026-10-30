@@ -143,6 +143,8 @@ namespace WaypointQueue
 
         public void OnModUnload()
         {
+            ModLocator.Settings.Save();
+
             HarmonyInstance.UnpatchAll(ModContext.ModIdentifier);
 
             PendingSwitchRestorer.Shutdown();

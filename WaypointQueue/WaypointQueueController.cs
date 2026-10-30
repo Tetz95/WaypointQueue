@@ -196,8 +196,7 @@ namespace WaypointQueue
                         if (assignedRoute != null)
                         {
                             ModLocator.Loader.Log($"Loco {entry.Locomotive.Ident}: queue empty & looping enabled → reassigning route '{assignedRoute.Name}' (apply mode).");
-                            // Re-apply the saved route, but we already know the waypoint list is currently empty so just append
-                            AddWaypointsFromRoute(entry.Locomotive, assignedRoute, append: true);
+                            AddWaypointsFromRoute(entry.Locomotive, assignedRoute);
 
                             // After reassigning, continue to next loco without marking for removal
                             continue;
@@ -404,7 +403,7 @@ namespace WaypointQueue
             RestartCoroutine();
         }
 
-        public void AddWaypointsFromRoute(BaseLocomotive loco, RouteDefinition route, bool append)
+        public void AddWaypointsFromRoute(BaseLocomotive loco, RouteDefinition route)
         {
             if (loco == null || route == null) return;
 
@@ -464,7 +463,7 @@ namespace WaypointQueue
                             ModStateManager.Shared.RemoveRouteAssignment(assignment.LocoId);
                             continue;
                         }
-                        AddWaypointsFromRoute((BaseLocomotive)loco, route, true);
+                        AddWaypointsFromRoute((BaseLocomotive)loco, route);
                     }
                     else
                     {
