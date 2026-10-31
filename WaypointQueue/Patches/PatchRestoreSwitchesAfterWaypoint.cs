@@ -229,7 +229,7 @@ namespace WaypointQueue
                 return;
 
             TrainController trainController = TrainController.Shared;
-            Graph graph = trainController.graph;
+            Graph graph = Graph.Shared;
             List<string> done = [];
             foreach (PendingSwitch pending in _pending.Values)
             {
