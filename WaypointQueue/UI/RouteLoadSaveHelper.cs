@@ -1,4 +1,5 @@
-﻿using Network;
+﻿using Game;
+using Network;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -33,7 +34,9 @@ namespace WaypointQueue.UI
             }
         }
 
-        public static string RoutesDirectory => Path.Combine(Game.UserPaths.RailroaderDirectory, "Waypoint Queue Saved Routes");
+        private static readonly string ModDataDirectory = Path.Combine(UserPaths.RailroaderDirectory, "ModData", "WaypointQueue");
+
+        public static string RoutesDirectory => Path.Combine(ModDataDirectory, "Routes");
 
         public class RouteDefinitionSaveState
         {
