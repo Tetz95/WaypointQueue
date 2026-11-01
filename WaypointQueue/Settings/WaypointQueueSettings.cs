@@ -13,11 +13,11 @@ namespace WaypointQueue.Settings
         public int Version = 2;
 
         [NonSerialized]
-        private static readonly string ModPreferencesDirectory = Path.Combine(UserPaths.RailroaderDirectory, "ModPreferences", "WaypointQueue");
+        private static readonly string ModPreferencesDirectory = Path.Combine(UserPaths.RailroaderDirectory, "ModSettings");
         [NonSerialized]
-        private static readonly string BindingsPath = Path.Combine(ModPreferencesDirectory, "inputbindings.json");
+        private static readonly string BindingsPath = Path.Combine(ModPreferencesDirectory, "princeofpluto-waypointqueue-inputbindings.json");
         [NonSerialized]
-        private static readonly string SettingsPath = Path.Combine(ModPreferencesDirectory, "settings.json");
+        private static readonly string SettingsPath = Path.Combine(ModPreferencesDirectory, "princeofpluto-waypointqueue-settings.json");
 
         [NonSerialized]
         private static readonly string OldBindingsPath = Path.Combine(ModLocator.ModDirectory, "inputbindings.json");
