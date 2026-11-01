@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using Game;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,9 +13,16 @@ namespace WaypointQueue.Settings
         public int Version = 2;
 
         [NonSerialized]
-        private static readonly string BindingsPath = Path.Combine(ModLocator.ModDirectory, "inputbindings.json");
+        private static readonly string ModPreferencesDirectory = Path.Combine(UserPaths.RailroaderDirectory, "ModPreferences", "WaypointQueue");
         [NonSerialized]
-        private static readonly string SettingsPath = Path.Combine(ModLocator.ModDirectory, "settings.json");
+        private static readonly string BindingsPath = Path.Combine(ModPreferencesDirectory, "inputbindings.json");
+        [NonSerialized]
+        private static readonly string SettingsPath = Path.Combine(ModPreferencesDirectory, "settings.json");
+
+        [NonSerialized]
+        private static readonly string OldBindingsPath = Path.Combine(ModLocator.ModDirectory, "inputbindings.json");
+        [NonSerialized]
+        private static readonly string OldSettingsPath = Path.Combine(ModLocator.ModDirectory, "settings.json");
 
         [Serializable]
         internal struct InputBindingOverrideData
@@ -113,6 +121,9 @@ namespace WaypointQueue.Settings
             WaypointQueueSettings settings = null;
 
             ModLocator.Loader.Log("Checking for WPQ settings");
+
+            Directory.CreateDirectory(ModPreferencesDirectory);
+
             if (File.Exists(SettingsPath))
             {
                 try
@@ -124,6 +135,19 @@ namespace WaypointQueue.Settings
                 catch (System.Exception e)
                 {
                     ModLocator.Loader.LogError(e, "Failed to load settings file");
+                }
+            }
+            else if (File.Exists(OldSettingsPath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(OldSettingsPath);
+                    settings = JsonConvert.DeserializeObject<WaypointQueueSettings>(json);
+                    ModLocator.Loader.Log("Successfully loaded old WPQ settings");
+                }
+                catch (System.Exception e)
+                {
+                    ModLocator.Loader.LogError(e, "Failed to load old settings file");
                 }
             }
 
@@ -186,6 +210,31 @@ namespace WaypointQueue.Settings
                 else
                 {
                     ModLocator.Loader.Log("Found empty WPQ input bindings file");
+                }
+            }
+            else if (File.Exists(OldBindingsPath))
+            {
+                string overridesJson = File.ReadAllText(OldBindingsPath);
+                if (!string.IsNullOrWhiteSpace(overridesJson))
+                {
+                    var overrideData = JsonConvert.DeserializeObject<List<InputBindingOverrideData>>(overridesJson);
+                    foreach (var entry in overrideData)
+                    {
+                        //ModLocator.Loader.Log($"Searching for action {entry.ActionName}");
+                        var action = Input.map.FindAction(entry.ActionName, true);
+                        if (action != null && action.bindings.Count > entry.BindingIndex)
+                        {
+                            //ModLocator.Loader.Log($"Found action {entry.ActionName}. Applying binding override path {entry.OverridePath} to {entry.BindingIndex}");
+                            action.ApplyBindingOverride(entry.BindingIndex, entry.OverridePath);
+                        }
+                    }
+                    //Input.actions.LoadBindingOverridesFromJson(overridesJson);
+                    ModLocator.Loader.Log("Loaded old WPQ input bindings from disk");
+                    loaded = true;
+                }
+                else
+                {
+                    ModLocator.Loader.Log("Found empty old WPQ input bindings file");
                 }
             }
 

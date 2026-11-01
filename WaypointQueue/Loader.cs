@@ -55,6 +55,7 @@ namespace WaypointQueue
             ModLocator.Loader = this;
 
             ModLocator.Settings = WaypointQueueSettings.Load();
+            ModLocator.Settings.Save();
 
             ServiceProvider = new ServiceProvider();
             ModLocator.ServiceProvider = ServiceProvider;
