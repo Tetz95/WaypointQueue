@@ -569,8 +569,6 @@ namespace WaypointQueue
             ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
             _autoEngineerService.SendToWaypoint(ordersHelper, orderWaypoint);
 
-            _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
-
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
         }
 

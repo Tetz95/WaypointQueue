@@ -90,6 +90,8 @@ namespace WaypointQueue
                 return true;
             }
 
+            ApplyTimetableSymbolIfRequested(wp);
+
             // ModLocator.Loader.LogDebug($"Trying to handle unresolved waypoint for {wp.Locomotive.Ident}:\n {wp.ToString()}");
             if (!wp.StopAtWaypoint)
             {

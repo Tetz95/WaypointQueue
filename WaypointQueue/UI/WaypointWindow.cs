@@ -410,17 +410,17 @@ namespace WaypointQueue.UI
 
                 BuildDestinationField(waypoint, builder);
 
-                if (isRouteWindow || waypoint.Locomotive.TryGetTimetableTrainCrewId(out string trainCrewId))
-                {
-                    BuildTrainSymbolField(waypoint, builder, onWaypointChange);
-                }
-
                 builder.HStack(row =>
                 {
                     BuildStopAtWaypointField(waypoint, row, onWaypointChange, isRouteWindow);
 
                     BuildSendPastWaypointField(waypoint, row, onWaypointChange);
                 });
+
+                if (isRouteWindow || waypoint.Locomotive.TryGetTimetableTrainCrewId(out string trainCrewId))
+                {
+                    BuildTrainSymbolField(waypoint, builder, onWaypointChange);
+                }
 
                 if (!waypoint.StopAtWaypoint && !waypoint.IsCoupling)
                 {
@@ -773,7 +773,7 @@ namespace WaypointQueue.UI
         {
             var (labels, values, selectedIndex) = BuildTimetableSymbolChoices(waypoint.TimetableSymbol);
 
-            var trainSymbolField = builder.AddField($"Train Symbol",
+            var trainSymbolField = builder.AddField($"Then change symbol",
             builder.AddDropdown(labels, selectedIndex, (int idx) =>
             {
                 // Map: 0 = No change (null), 1 = None (""), 2+ = actual symbol names
@@ -781,7 +781,7 @@ namespace WaypointQueue.UI
                 onWaypointChange(waypoint);
             }));
 
-            AddLabelOnlyTooltip(trainSymbolField, "Train symbol", "Change to this train symbol once this waypoint becomes active.");
+            AddLabelOnlyTooltip(trainSymbolField, "Then change symbol", "Change to this timetable train symbol once this waypoint is reached.");
             return builder;
         }
 
