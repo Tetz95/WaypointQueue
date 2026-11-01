@@ -27,6 +27,9 @@ namespace WaypointQueue
 
         private readonly Dictionary<string, float> _timeSpentWaitingBeforeCutLookup = [];
 
+        // Waypoints whose "then change symbol" has been applied (ids are new for every queued waypoint, copies included).
+        private readonly HashSet<string> _timetableSymbolApplied = [];
+
         private readonly Dictionary<string, float> _timeSpentWaitingForRefuel = [];
 
         private readonly Dictionary<string, HashSet<string>> _locoIdsWithTroubleRefuelingByWaypointLocoId = [];
@@ -90,6 +93,18 @@ namespace WaypointQueue
             if (wp.WaitingWasSkipped)
             {
                 return true;
+            }
+
+            // Once per waypoint: this runs on every tick until the waypoint's orders are done (a wait or a refuel takes
+            // minutes), and each call set the symbol again, logged it, or put up the no-crew alert again.
+            if (_timetableSymbolApplied.Add(wp.Id))
+            {
+                if (_timetableSymbolApplied.Count > 500)
+                {
+                    _timetableSymbolApplied.Clear();
+                    _timetableSymbolApplied.Add(wp.Id);
+                }
+                ApplyTimetableSymbolIfRequested(wp);
             }
 
             // ModLocator.Loader.LogDebug($"Trying to handle unresolved waypoint for {wp.Locomotive.Ident}:\n {wp.ToString()}");

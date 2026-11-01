@@ -710,8 +710,6 @@ namespace WaypointQueue
                 _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
             }
 
-            _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
-
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
         }
 

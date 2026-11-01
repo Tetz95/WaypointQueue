@@ -421,11 +421,6 @@ namespace WaypointQueue.UI
 
                 BuildDestinationField(waypoint, builder);
 
-                if (isRouteWindow || waypoint.Locomotive.TryGetTimetableTrainCrewId(out string trainCrewId))
-                {
-                    BuildTrainSymbolField(waypoint, builder, onWaypointChange);
-                }
-
                 builder.HStack(row =>
                 {
                     BuildStopAtWaypointField(waypoint, row, onWaypointChange, isRouteWindow);
@@ -434,6 +429,11 @@ namespace WaypointQueue.UI
                 });
 
                 BuildPoseField(waypoint, builder, isRouteWindow);
+
+                if (isRouteWindow || waypoint.Locomotive.TryGetTimetableTrainCrewId(out string trainCrewId))
+                {
+                    BuildTrainSymbolField(waypoint, builder, onWaypointChange);
+                }
 
                 if (!waypoint.StopAtWaypoint && !waypoint.IsCoupling)
                 {
@@ -801,7 +801,7 @@ namespace WaypointQueue.UI
         {
             var (labels, values, selectedIndex) = BuildTimetableSymbolChoices(waypoint.TimetableSymbol);
 
-            var trainSymbolField = builder.AddField($"Train Symbol",
+            var trainSymbolField = builder.AddField($"Then change symbol",
             builder.AddDropdown(labels, selectedIndex, (int idx) =>
             {
                 // Map: 0 = No change (null), 1 = None (""), 2+ = actual symbol names
@@ -809,7 +809,7 @@ namespace WaypointQueue.UI
                 onWaypointChange(waypoint);
             }));
 
-            AddLabelOnlyTooltip(trainSymbolField, "Train symbol", "Change to this train symbol once this waypoint becomes active.");
+            AddLabelOnlyTooltip(trainSymbolField, "Then change symbol", "Change to this timetable train symbol once this waypoint is reached.");
             return builder;
         }
 
@@ -1921,13 +1921,11 @@ if (waypoint.WillRefuel)
             ModLocator.Loader.LogDebug($"Building track destination options for {waypoint.Id}");
             List<DropdownOption> options = [new DropdownOption("Select a destination", ""), new DropdownOption(WaypointResolver.NoDestinationString, WaypointResolver.NoDestinationString)];
 
-            // 2026.1 keeps the industry components by identifier instead of a car position table.
-            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_industryComponentLookup").GetValue<Dictionary<string, IndustryComponent>>()
-                .ToDictionary(kv => kv.Key, kv => (OpsCarPosition)kv.Value);
+            var opsCarPositions = OpsController.Shared.AllIndustryComponents.Select(c => new OpsCarPosition(c.DisplayName, c.Identifier, c.trackSpans));
 
             string filter = waypoint.DestinationSearchText?.Trim().ToLower() ?? "";
 
-            foreach (var item in carPositionLookup.Values)
+            foreach (var item in opsCarPositions)
             {
                 if (item.Identifier.ToLower().EndsWith(".formula"))
                 {

@@ -829,6 +829,17 @@ namespace WaypointQueue
             if (Pose != null && !Pose.IsEmpty)
             {
                 dictionary[ValueKeys.Pose] = Pose.ToPropertyValue();
+                // Also in Waypoint Queue 2.1.0's own keys, so a route exported here keeps its pose there
+                dictionary[ValueKeys.ArrivingEnd] = Value.Int(Pose.ArrivingEnd);
+                dictionary[ValueKeys.BodyToward] = Value.Int(Pose.BodyToward);
+                if (Pose.Turns != null && Pose.Turns.Length > 0)
+                {
+                    dictionary[ValueKeys.RequiredTurns] = Value.Array(Pose.Turns.Select(t => Value.String(t)).ToList());
+                }
+                if (Pose.CoupleToCarEnd.HasValue)
+                {
+                    dictionary[ValueKeys.CoupleToCarEnd] = Value.Int(Pose.CoupleToCarEnd.Value);
+                }
             }
             return Value.Dictionary(dictionary.ToDictionary(k => k.Key, v => v.Value));
         }
@@ -896,6 +907,10 @@ namespace WaypointQueue
             waypoint.StatusLabel = dict[ValueKeys.StatusLabel].StringValue;
             waypoint.Errors = [.. dict[ValueKeys.Errors].ArrayValue.ToList().Select(e => WaypointError.FromPropertyValue(e))];
             waypoint.Pose = dict.TryGetValue(ValueKeys.Pose, out Value pose) ? QueuedPose.FromPropertyValue(pose) : null;
+            if (waypoint.Pose == null)
+            {
+                waypoint.Pose = PoseFromUpstreamKeys(dict);
+            }
 
             if (dict.ContainsKey(ValueKeys.EnableMultipleRefueling))
             {
@@ -991,6 +1006,24 @@ namespace WaypointQueue
             internal static string StatusLabel = "status_label";
             internal static string Errors = "errors";
             internal static string Pose = "pose";
+            // Waypoint Queue 2.1.0 keeps the pose in these (no body length; it sends 0)
+            internal static string CoupleToCarEnd = "couple_to_car_end";
+            internal static string ArrivingEnd = "arriving_end";
+            internal static string BodyToward = "body_toward";
+            internal static string RequiredTurns = "required_turns";
+        }
+
+        // A waypoint saved by Waypoint Queue 2.1.0 (a route file exported there, say): its pose from that version's keys.
+        private static QueuedPose PoseFromUpstreamKeys(IReadOnlyDictionary<string, Value> dict)
+        {
+            var pose = new QueuedPose
+            {
+                ArrivingEnd = dict.TryGetValue(ValueKeys.ArrivingEnd, out Value end) && !end.IsNull ? end.IntValue : 0,
+                BodyToward = dict.TryGetValue(ValueKeys.BodyToward, out Value side) && !side.IsNull ? side.IntValue : 0,
+                CoupleToCarEnd = dict.TryGetValue(ValueKeys.CoupleToCarEnd, out Value cplEnd) && !cplEnd.IsNull ? cplEnd.IntValue : null,
+                Turns = dict.TryGetValue(ValueKeys.RequiredTurns, out Value turns) && !turns.IsNull ? turns.ArrayValue.Select(v => v.StringValue).ToArray() : null,
+            };
+            return pose.IsEmpty ? null : pose;
         }
     }
 
