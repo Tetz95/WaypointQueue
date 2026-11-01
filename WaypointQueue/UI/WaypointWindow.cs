@@ -350,7 +350,7 @@ namespace WaypointQueue.UI
         private void OnWaypointDelete(ManagedWaypoint waypoint)
         {
             _opsDestinationOptionsByWaypointId.Remove(waypoint.Id);
-            WaypointQueueController.Shared.RemoveWaypoint(waypoint);
+            WaypointQueueController.Shared.DeleteWaypoint(waypoint);
         }
 
         private void OnWaypointReorder(ManagedWaypoint waypoint, int newIndex)

@@ -2,7 +2,11 @@ using System.Collections.Generic;
 using HarmonyLib;
 using Model;
 using Model.AI;
+using Model.AI.Waypoints;
+using Track;
+using Track.Search;
 using UI.Waypoints;
+using UnityEngine;
 using WaypointQueue.State;
 
 namespace WaypointQueue
@@ -87,6 +91,46 @@ namespace WaypointQueue
                 dontSnap.Add(car);
             }
             ModLocator.Loader.Log($"Picker shows {locomotive.Ident}'s train as predicted at waypoint {_index + 1}: {_prediction.Describe()}");
+        }
+
+        // The picker works out the pose from the locomotive where it stands now: the side of the mark the train comes
+        // from (NearSideOf) and the natural arrival (the auto engineer's route search, PlanNaturalArrival). For a waypoint
+        // later in the queue the train comes from wherever the earlier waypoints leave it, so where an earlier leg turns
+        // it round, the previewed pose came out reversed. While picking such a waypoint both use the predicted train.
+        // NearSideOf's own private helpers, so the side is worked out exactly as the game does, from the predicted train.
+        private static readonly System.Func<IGraphView, Location, TrackSegment.End, float, Location> StepInto =
+            AccessTools.MethodDelegate<System.Func<IGraphView, Location, TrackSegment.End, float, Location>>(AccessTools.Method(typeof(WaypointPoseCycle), "StepInto"));
+        private static readonly System.Func<IGraphView, Location, TrackSegment.End, Vector3> DirectionToward =
+            AccessTools.MethodDelegate<System.Func<IGraphView, Location, TrackSegment.End, Vector3>>(AccessTools.Method(typeof(WaypointPoseCycle), "DirectionToward"));
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(WaypointPoseCycle), nameof(WaypointPoseCycle.NearSideOf))]
+        private static bool NearSideOfPrefix(IGraphView graphView, Location waypoint, BaseLocomotive locomotive, out Vector3 nearDirection, ref TrackSegment.End __result)
+        {
+            nearDirection = default;
+            if (_prediction == null || locomotive != _locomotive)
+            {
+                return true;
+            }
+            Vector3 train = _prediction.Position;
+            Vector3 towardA = graphView.GetPosition(StepInto(graphView, waypoint, TrackSegment.End.A, 20f));
+            Vector3 towardB = graphView.GetPosition(StepInto(graphView, waypoint, TrackSegment.End.B, 20f));
+            __result = (towardA - train).sqrMagnitude <= (towardB - train).sqrMagnitude ? TrackSegment.End.A : TrackSegment.End.B;
+            nearDirection = DirectionToward(graphView, waypoint, __result);
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(PosedWaypoint), nameof(PosedWaypoint.PlanNaturalArrival))]
+        private static bool PlanNaturalArrivalPrefix(BaseLocomotive locomotive, Location mark, out List<RouteSearch.Step> route, ref bool __result)
+        {
+            route = null;
+            if (_prediction == null || locomotive != _locomotive)
+            {
+                return true;
+            }
+            __result = _prediction.TryRouteTo(mark, out route);
+            return false;
         }
 
         [HarmonyPostfix]

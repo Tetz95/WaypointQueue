@@ -30,6 +30,9 @@ namespace WaypointQueue
 
         public float Length => AutoEngineerPlanner.CalculateTotalLength(Cars);
 
+        // Each earlier waypoint's arriving end and how it was decided (for tests: Explain).
+        public List<string> Legs { get; } = [];
+
         // Why the prediction may be off, one note per guess; empty when every step was known.
         public List<string> Guesses { get; } = [];
 
@@ -104,6 +107,7 @@ namespace WaypointQueue
                 ConsistEnd posedEnd = pose.ArrivingEnd == (int)WaypointEnd.A ? ConsistEnd.A : ConsistEnd.B;
                 Location intoBody = WaypointPose.IntoBody(mark, WaypointPose.ToSegmentEnd((BodyToward)pose.BodyToward));
                 StandAt(posedEnd, intoBody);
+                Legs.Add($"{DescribeMark(wp)}: end {posedEnd} arrives (picked pose)");
                 return posedEnd;
             }
 
@@ -111,6 +115,7 @@ namespace WaypointQueue
             {
                 ConsistEnd leading = route[route.Count - 1].LeadingEnd;
                 StandAt(leading, IntoBodyFromRoute(mark, route));
+                Legs.Add($"{DescribeMark(wp)}: end {leading} arrives (route search)");
                 return leading;
             }
 
@@ -118,8 +123,15 @@ namespace WaypointQueue
             Guesses.Add("no route found to " + DescribeMark(wp));
             Vector3 markPosition = _graph.GetPosition(mark);
             ConsistEnd nearer = (_graph.GetPosition(_endA) - markPosition).sqrMagnitude <= (_graph.GetPosition(_endB) - markPosition).sqrMagnitude ? ConsistEnd.A : ConsistEnd.B;
+            Legs.Add($"{DescribeMark(wp)}: end {nearer} arrives (nearer end, no route)");
             return nearer;
         }
+
+        // Where the predicted train stands: halfway between its outer ends.
+        public Vector3 Position => (_graph.GetPosition(_endA) + _graph.GetPosition(_endB)) * 0.5f;
+
+        // The auto engineer's route from where the predicted train stands to the mark (for the picker's natural pose).
+        public bool TryRouteTo(Location mark, out List<RouteSearch.Step> route) => TryRoute(mark, out route);
 
         // The auto engineer's route from either end of the predicted train, as the planner searches (it starts at the
         // leading end and may turn back); the shorter one is the one it would take.
@@ -347,6 +359,13 @@ namespace WaypointQueue
             }
             TrainPrediction prediction = ForQueueIndex(locomotive, int.Parse(index));
             return prediction.Describe() + ": " + string.Join(" - ", prediction.Cars.Select(c => c.DisplayName));
+        }
+
+        // For tests: the cars end A to B, each leg's arriving end and the locomotive's front end.
+        public string Explain(BaseLocomotive locomotive)
+        {
+            ConsistEnd front = global::Model.AI.Waypoints.PosedWaypoint.FrontEnd(locomotive);
+            return $"{Describe()} | cars A..B: {string.Join(" ", Cars.Select(c => c.DisplayName))} | front end {front} | " + string.Join(" | ", Legs);
         }
 
         public string Describe()

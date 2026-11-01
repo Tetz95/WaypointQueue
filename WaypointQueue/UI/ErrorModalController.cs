@@ -87,7 +87,7 @@ namespace WaypointQueue.UI
                     });
                     builder.AddButtonMedium("Delete waypoint", () =>
                     {
-                        WaypointQueueController.Shared.RemoveWaypoint(wp);
+                        WaypointQueueController.Shared.DeleteWaypoint(wp);
                         dismiss?.Invoke();
                     });
                 });

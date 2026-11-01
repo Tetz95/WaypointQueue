@@ -393,13 +393,13 @@ namespace WaypointQueue
                 waypoint.StatusLabel = "Running to waypoint";
             }
 
+            string sentId = locoState.UnresolvedWaypoint?.Id;
             locoState.Waypoints.Insert(beforeWaypointIndex, waypoint);
-
-            locoState.UnresolvedWaypoint = locoState.Waypoints.FirstOrDefault();
 
             ModLocator.Loader.LogDebug($"Saving loco queue state after inserting waypoint for loco id: {loco.id}");
             ModStateManager.Shared.SaveLocoWaypointState(loco.id, locoState);
             ModLocator.Loader.Log($"Inserted waypoint for {waypoint.Locomotive.Ident} to {waypoint.Location} at index {beforeWaypointIndex}");
+            ResendIfFirstChanged(locoState, sentId);
             RestartCoroutine();
         }
 
@@ -499,6 +499,44 @@ namespace WaypointQueue
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
         }
 
+        // A waypoint deleted by the player (the waypoint window, the error dialog): if it was the one sent to the train,
+        // the train is sent on to the next waypoint, or stopped when the queue is now empty.
+        public void DeleteWaypoint(ManagedWaypoint waypoint)
+        {
+            LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId);
+            string sentId = state.UnresolvedWaypoint?.Id;
+            RemoveWaypoint(waypoint);
+            ResendIfFirstChanged(ModStateManager.Shared.GetLocoWaypointState(waypoint.LocomotiveId), sentId);
+            RestartCoroutine();
+        }
+
+        // The waypoint sent to the train (UnresolvedWaypoint) must stay the queue's first. When a player's edit changes
+        // the first waypoint (deleting the sent one, inserting or moving one in front of it), the train still had the
+        // old order: it ran to the deleted waypoint, and arriving there resolved the new first waypoint, which it never
+        // went to. So the new first waypoint is sent, or the order cleared when the queue is empty. Nothing changes
+        // when nothing had been sent (the tick sends the first waypoint) or the sent one is still first.
+        private void ResendIfFirstChanged(LocoWaypointState state, string sentId)
+        {
+            ManagedWaypoint first = state.Waypoints.FirstOrDefault();
+            if (sentId == null || first?.Id == sentId)
+            {
+                return;
+            }
+            AutoEngineerOrdersHelper ordersHelper = _autoEngineerService.GetOrdersHelper(state.Locomotive);
+            if (first == null || !_autoEngineerService.IsInWaypointMode(ordersHelper))
+            {
+                state.UnresolvedWaypoint = null;
+                ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+                if (first == null)
+                {
+                    _autoEngineerService.CancelActiveOrders(state.Locomotive);
+                }
+                return;
+            }
+            ModLocator.Loader.Log($"{state.Locomotive.Ident}: first waypoint changed, sending the train to {first.Location}");
+            SendToFirstWaypoint(state, ordersHelper);
+        }
+
         public void RemoveCurrentWaypoint(string locoId)
         {
             LocoWaypointState state = ModStateManager.Shared.GetLocoWaypointState(locoId);
@@ -568,12 +606,12 @@ namespace WaypointQueue
                 newIndex--; // the actual index could have shifted due to the removal
             }
 
+            string sentId = state.UnresolvedWaypoint?.Id;
             state.Waypoints.Insert(newIndex, waypoint);
-
-            state.UnresolvedWaypoint = state.Waypoints.FirstOrDefault();
 
             ModLocator.Loader.LogDebug($"Saving loco queue state after reordering waypoint {waypoint.Id} for loco id: {waypoint.LocomotiveId}");
             ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+            ResendIfFirstChanged(state, sentId);
         }
 
         public void RerouteCurrentWaypoint(string locoId)

@@ -30,6 +30,10 @@ namespace WaypointQueue
 
         public GameObject RouteStorageGO { get; private set; }
 
+        // Disposed on unload: the game reloads mods mid-session (OnModUnload, then OnModLoad on a new loader), and the old
+        // loader's handler would still run on map load against windows destroyed with it.
+        private IDisposable _mapDidLoadSubscription;
+
         public static string QueueStorageGOName = "WaypointQueueStateStorage";
         public static string RouteStorageGOName = "WaypointQueueRouteStorage";
 
@@ -60,7 +64,7 @@ namespace WaypointQueue
             ModLocator.ServiceProvider = ServiceProvider;
             ConfigureServices();
 
-            EventBus.Subscribe<MapDidLoadEvent>(OnMapDidLoad);
+            _mapDidLoadSubscription = EventBus.Subscribe<MapDidLoadEvent>(OnMapDidLoad);
 
             HarmonyInstance = new Harmony(ModContext.ModIdentifier);
             //Harmony.DEBUG = true;
@@ -144,6 +148,9 @@ namespace WaypointQueue
         public void OnModUnload()
         {
             ModLocator.Settings.Save();
+
+            _mapDidLoadSubscription?.Dispose();
+            _mapDidLoadSubscription = null;
 
             HarmonyInstance.UnpatchAll(ModContext.ModIdentifier);
 
