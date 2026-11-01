@@ -33,6 +33,7 @@ namespace WaypointQueue
             AccessTools.FieldRefAccess<AutoEngineerDestinationPicker, HashSet<Car>>("_dontSnapToCars");
 
         private static bool _explicit;
+        private static string _lastLogged;
 
         // The next pick for this locomotive goes in at this queue index (a move or an insert in WaypointQueue's window);
         // -1 for none (a route waypoint).
@@ -90,7 +91,13 @@ namespace WaypointQueue
             {
                 dontSnap.Add(car);
             }
-            ModLocator.Loader.Log($"Picker shows {locomotive.Ident}'s train as predicted at waypoint {_index + 1}: {_prediction.Describe()}");
+            // The picker refreshes its consist every frame: log the prediction once, when it changes.
+            string message = $"Picker shows {locomotive.Ident}'s train as predicted at waypoint {_index + 1}: {_prediction.Describe()}";
+            if (message != _lastLogged)
+            {
+                _lastLogged = message;
+                ModLocator.Loader.Log(message);
+            }
         }
 
         // The picker works out the pose from the locomotive where it stands now: the side of the mark the train comes
@@ -150,6 +157,7 @@ namespace WaypointQueue
             _locomotive = null;
             _index = -1;
             _prediction = null;
+            _lastLogged = null;
         }
 
         private static int QueueCount(BaseLocomotive locomotive) =>
