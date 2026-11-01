@@ -1883,11 +1883,11 @@ namespace WaypointQueue.UI
             ModLocator.Loader.LogDebug($"Building track destination options for {waypoint.Id}");
             List<DropdownOption> options = [new DropdownOption("Select a destination", ""), new DropdownOption(WaypointResolver.NoDestinationString, WaypointResolver.NoDestinationString)];
 
-            var carPositionLookup = Traverse.Create(OpsController.Shared).Field("_carPositionLookup").GetValue<Dictionary<string, OpsCarPosition>>();
+            var opsCarPositions = OpsController.Shared.AllIndustryComponents.Select(c => new OpsCarPosition(c.DisplayName, c.Identifier, c.trackSpans));
 
             string filter = waypoint.DestinationSearchText?.Trim().ToLower() ?? "";
 
-            foreach (var item in carPositionLookup.Values)
+            foreach (var item in opsCarPositions)
             {
                 if (item.Identifier.ToLower().EndsWith(".formula"))
                 {
