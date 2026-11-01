@@ -481,6 +481,7 @@ namespace WaypointQueue.UI
                 {
                     if (b)
                     {
+                        route = RouteRegistry.Current(route);
                         route.Waypoints.Clear();
                         ModStateManager.Shared.SaveRoute(route);
                     }
@@ -528,11 +529,12 @@ namespace WaypointQueue.UI
         private void AssignToSelectedLoco(RouteDefinition route, bool append)
         {
             var loco = TrainController.Shared.SelectedLocomotive;
-            WaypointQueueController.Shared.AddWaypointsFromRoute(loco, route);
+            WaypointQueueController.Shared.AddWaypointsFromRoute(loco, RouteRegistry.Current(route));
         }
 
         private void SetFromSelectedLoco(RouteDefinition route)
         {
+            route = RouteRegistry.Current(route);
             var loco = TrainController.Shared.SelectedLocomotive;
             if (loco == null) return;
 
@@ -562,6 +564,7 @@ namespace WaypointQueue.UI
 
         private void AppendFromSelectedLoco(RouteDefinition route)
         {
+            route = RouteRegistry.Current(route);
             var loco = TrainController.Shared.SelectedLocomotive;
             if (loco == null || route == null) return;
 

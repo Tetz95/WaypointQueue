@@ -40,6 +40,15 @@ namespace WaypointQueue
             return null;
         }
 
+        // The stored route as it is now. Every change to a route stores a new copy, while the route window keeps the copy it
+        // was built from (it updates single waypoints in place), so an action on that copy worked on old waypoints: "Copy to
+        // Loco" left out waypoints added since and settings changed since, and a save from it dropped them.
+        public static RouteDefinition Current(RouteDefinition route)
+        {
+            if (route == null) return null;
+            return GetById(route.Id) ?? route;
+        }
+
         public static RouteDefinition CreateNewRoute()
         {
             var route = new RouteDefinition { Name = $"Route {Routes.Count + 1}" };
@@ -54,6 +63,7 @@ namespace WaypointQueue
 
         public static void Rename(RouteDefinition route, string newName)
         {
+            route = Current(route);
             if (route == null) return;
             newName = (newName ?? "").Trim();
             if (newName.Length == 0 || newName == route.Name) return;
@@ -65,6 +75,7 @@ namespace WaypointQueue
 
         public static void RenameSection(RouteDefinition route, string newSection)
         {
+            route = Current(route);
             if (route == null) return;
             newSection = (newSection ?? "").Trim();
             if (newSection.Length == 0 || newSection == route.Section) return;
@@ -116,9 +127,10 @@ namespace WaypointQueue
 
         public static void ReorderWaypointInRoute(RouteDefinition route, ManagedWaypoint waypoint, int newIndex)
         {
+            route = Current(route);
             if (route != null && route.Waypoints != null)
             {
-                int oldIndex = route.Waypoints.IndexOf(waypoint);
+                int oldIndex = route.Waypoints.FindIndex(w => w.Id == waypoint.Id);
                 if (oldIndex < 0) return;
 
                 route.Waypoints.RemoveAt(oldIndex);
