@@ -11,10 +11,15 @@ namespace WaypointQueue.Services
 {
     internal class AutoEngineerService(ICarService carService)
     {
+        public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, OrderWaypoint orderWaypoint)
+        {
+            ordersHelper.SetOrdersValue(null, null, null, null, orderWaypoint);
+        }
+
         public void SendToWaypoint(AutoEngineerOrdersHelper ordersHelper, Location location, string coupleToCarId = null)
         {
-            OrderWaypoint maybeOrderWaypoint = new OrderWaypoint(Graph.LocationToString(location.Clamped()), coupleToCarId);
-            ordersHelper.SetOrdersValue(null, null, null, null, maybeOrderWaypoint);
+            OrderWaypoint orderWaypoint = new OrderWaypoint(Graph.LocationToString(location), coupleToCarId);
+            SendToWaypoint(ordersHelper, orderWaypoint);
         }
 
         public void SendToWaypoint(BaseLocomotive loco, Location location, string coupleToCarId = null)

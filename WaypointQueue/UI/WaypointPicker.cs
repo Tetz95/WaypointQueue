@@ -1,6 +1,7 @@
 ﻿using HarmonyLib;
 using Helpers;
 using Model;
+using Model.AI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -205,13 +206,15 @@ namespace WaypointQueue.UI
 
         private void HandleInsertNewWaypoint(Location location, string coupleToCarId)
         {
-            ManagedWaypoint insertedWaypoint = new ManagedWaypoint((BaseLocomotive)_locomotive, location, coupleToCarId);
+            OrderWaypoint orderWaypoint = new OrderWaypoint(Graph.LocationToString(location), coupleToCarId);
+            ManagedWaypoint insertedWaypoint = new ManagedWaypoint((BaseLocomotive)_locomotive, orderWaypoint);
             _onWaypointInsert(insertedWaypoint, _waypoint.Id);
         }
 
         private void HandleAddWaypointToRoute(Location location, string coupleToCarId)
         {
-            ManagedWaypoint addedWaypoint = new ManagedWaypoint(null, location, coupleToCarId);
+            OrderWaypoint orderWaypoint = new OrderWaypoint(Graph.LocationToString(location), coupleToCarId);
+            ManagedWaypoint addedWaypoint = new ManagedWaypoint(null, orderWaypoint);
             _refuelService.CheckNearbyFuelLoaders(addedWaypoint);
             _onWaypointInsert(addedWaypoint, _routeId);
         }

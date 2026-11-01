@@ -1,12 +1,14 @@
 ﻿using Game;
 using KeyValue.Runtime;
 using Model;
+using Model.AI;
 using Model.Ops;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Track;
+using Track.Search;
 using UnityEngine;
 using WaypointQueue.Model;
 using static Model.Ops.OpsController;
@@ -21,12 +23,16 @@ namespace WaypointQueue
         [JsonProperty]
         public int? Version { get; set; }
 
-        public ManagedWaypoint(BaseLocomotive locomotive, Location location, string coupleToCarId = "")
+        public ManagedWaypoint(BaseLocomotive locomotive, OrderWaypoint orderWaypoint)
         {
-            Version = 1;
+            Version = 2;
             LocomotiveId = locomotive?.id ?? null;
-            LocationString = Graph.LocationToString(location);
-            CoupleToCarId = coupleToCarId;
+            LocationString = orderWaypoint.LocationString;
+            CoupleToCarId = orderWaypoint.CoupleToCarId;
+            CoupleToCarEnd = orderWaypoint.CoupleToCarEnd;
+            ArrivingEnd = orderWaypoint.ArrivingEnd;
+            BodyToward = orderWaypoint.BodyToward;
+            RequiredTurns = orderWaypoint.RequiredTurns;
 
             ConnectAirOnCouple = ModLocator.Settings.ConnectAirByDefault;
             ReleaseHandbrakesOnCouple = ModLocator.Settings.ReleaseHandbrakesByDefault;
@@ -36,7 +42,7 @@ namespace WaypointQueue
 
             WillLimitPassingSpeed = !ModLocator.Settings.DoNotLimitPassingSpeedDefault;
 
-            if (ModLocator.Settings.Input.coupleToNearestShortcut.IsPressed() && String.IsNullOrEmpty(coupleToCarId))
+            if (ModLocator.Settings.Input.coupleToNearestShortcut.IsPressed() && String.IsNullOrEmpty(orderWaypoint.CoupleToCarId))
             {
                 CouplingSearchMode = (ManagedWaypoint.CoupleSearchMode)ModLocator.Settings.DefaultCouplingSearchMode;
             }
@@ -160,6 +166,11 @@ namespace WaypointQueue
                 return !string.IsNullOrEmpty(CoupleToCarId);
             }
         }
+
+        public Car.End? CoupleToCarEnd { get; set; }
+        public WaypointEnd ArrivingEnd { get; set; }
+        public BodyToward BodyToward { get; set; }
+        public JunctionTurn[] RequiredTurns { get; set; }
 
         public bool ConnectAirOnCouple { get; set; }
         public bool ReleaseHandbrakesOnCouple { get; set; }
@@ -719,6 +730,8 @@ namespace WaypointQueue
 
         public Value ToPropertyValue()
         {
+            var encodedTurnsArray = OrderWaypoint.EncodeTurns(RequiredTurns);
+
             var dictionary = new Dictionary<string, Value>
             {
                 [ValueKeys.Id] = Value.String(Id),
@@ -727,6 +740,8 @@ namespace WaypointQueue
                 [ValueKeys.LocomotiveId] = Value.String(LocomotiveId),
                 [ValueKeys.LocationString] = Value.String(LocationString),
                 [ValueKeys.CoupleToCarId] = Value.String(CoupleToCarId),
+                [ValueKeys.ArrivingEnd] = Value.Int((int)ArrivingEnd),
+                [ValueKeys.BodyToward] = Value.Int((int)BodyToward),
                 [ValueKeys.ConnectAirOnCouple] = Value.Bool(ConnectAirOnCouple),
                 [ValueKeys.ReleaseHandbrakesOnCouple] = Value.Bool(ReleaseHandbrakesOnCouple),
                 [ValueKeys.HasResolvedBrakeSystemOnCouple] = Value.Bool(HasResolvedBrakeSystemOnCouple),
@@ -781,6 +796,17 @@ namespace WaypointQueue
                 [ValueKeys.StatusLabel] = Value.String(StatusLabel),
                 [ValueKeys.Errors] = Value.Array(Errors.Select(e => e.ToPropertyValue()).ToList()),
             };
+
+            if (encodedTurnsArray != null )
+            {
+                dictionary.Add(ValueKeys.RequiredTurns, Value.Array(encodedTurnsArray.Select((Func<string, Value>)((string id) => id)).ToList()));
+            }
+
+            if (CoupleToCarEnd.HasValue)
+            {
+                dictionary.Add(ValueKeys.CoupleToCarEnd, Value.Int((int)CoupleToCarEnd.Value));
+            }
+
             return Value.Dictionary(dictionary.ToDictionary(k => k.Key, v => v.Value));
         }
 
@@ -876,6 +902,28 @@ namespace WaypointQueue
                 waypoint.RepositioningToRetryRefuel = dict[ValueKeys.RepositioningToRetryRefuel].BoolValue;
             }
 
+            if (dict.ContainsKey(ValueKeys.CoupleToCarEnd))
+            {
+                waypoint.CoupleToCarEnd = (Car.End?)dict[ValueKeys.CoupleToCarEnd].IntValue;
+            }
+
+            if (dict.ContainsKey(ValueKeys.ArrivingEnd))
+            {
+                waypoint.ArrivingEnd = (WaypointEnd)dict[ValueKeys.ArrivingEnd].IntValue;
+            }
+
+            if (dict.ContainsKey(ValueKeys.BodyToward))
+            {
+                waypoint.BodyToward = (BodyToward)dict[ValueKeys.BodyToward].IntValue;
+            }
+
+            if (dict.ContainsKey(ValueKeys.RequiredTurns))
+            {
+                var encodedTurns = dict[ValueKeys.RequiredTurns].ArrayValue.Select((Value entry) => entry.StringValue).ToList();
+                var decodedTurns = OrderWaypoint.DecodeTurns(encodedTurns);
+                waypoint.RequiredTurns = decodedTurns;
+            }
+
             return waypoint;
         }
 
@@ -887,6 +935,11 @@ namespace WaypointQueue
             internal static string LocomotiveId = "locomotive_id";
             internal static string LocationString = "location_string";
             internal static string CoupleToCarId = "couple_to_car_id";
+            internal static string CoupleToCarEnd = "couple_to_car_end";
+            internal static string ArrivingEnd = "arriving_end";
+            internal static string BodyToward = "body_toward";
+            internal static string RequiredTurns = "required_turns";
+            internal static string BodyLength = "body_length";
             internal static string ConnectAirOnCouple = "connect_air_on_couple";
             internal static string ReleaseHandbrakesOnCouple = "release_handbrakes_on_couple";
             internal static string HasResolvedBrakeSystemOnCouple = "has_resolved_brake_system_on_couple";

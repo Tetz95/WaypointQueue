@@ -2,11 +2,10 @@
 using Model;
 using Model.AI;
 using System.Collections.Generic;
-using Track;
 using UI.Common;
 using UI.EngineControls;
+using WaypointQueue.Services;
 using WaypointQueue.State;
-using Location = Track.Location;
 
 namespace WaypointQueue
 {
@@ -14,13 +13,21 @@ namespace WaypointQueue
     internal class PatchAutoEngineerOrdersHelper
     {
         [HarmonyPrefix]
+        [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypointOrder))]
+        static bool SetWaypointOrderPrefix(OrderWaypoint waypoint, int? maxSpeedMph, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
+        {
+            AutoEngineerService autoEngineerService = ModLocator.ServiceProvider.GetService<AutoEngineerService>();
+            var ordersHelper = autoEngineerService.GetOrdersHelper((BaseLocomotive)____locomotive);
+            ordersHelper.SetOrdersValue(null, null, maxSpeedMph: maxSpeedMph, null, null);
+
+            return SetWaypointPrefix(waypoint, ref ____locomotive, ref ____persistence);
+        }
+
+
+        [HarmonyPrefix]
         [HarmonyPatch(nameof(AutoEngineerOrdersHelper.SetWaypoint))]
         static bool SetWaypointPrefix(OrderWaypoint waypoint, ref Car ____locomotive, ref AutoEngineerPersistence ____persistence)
         {
-            //Loader.LogDebug($"SetWaypoint prefix");
-            Location location = Graph.Shared.ResolveLocationString(waypoint.LocationString);
-            string coupleToCarId = waypoint.CoupleToCarId;
-
             OrderWaypoint? existingWaypoint = ____persistence.Orders.Waypoint;
             bool isAppendingWaypoint = ModLocator.Settings.Input.appendWaypointMode.IsPressed();
             bool isReplacingWaypoint = ModLocator.Settings.Input.replaceWaypointMode.IsPressed();
@@ -53,26 +60,26 @@ namespace WaypointQueue
                         if (b)
                         {
                             ModStateManager.Shared.RemoveLocoWaypointState(loco.id);
-                            HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                            HandleAddingWaypoint(loco, existingWaypoint, waypoint, isReplacingWaypoint, isInsertingNext);
                         }
                     });
                 }
                 else
                 {
                     ModStateManager.Shared.RemoveLocoWaypointState(____locomotive.id);
-                    HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                    HandleAddingWaypoint(loco, existingWaypoint, waypoint, isReplacingWaypoint, isInsertingNext);
                 }
             }
             else
             {
-                HandleAddingWaypoint(existingWaypoint, loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                HandleAddingWaypoint(loco, existingWaypoint, waypoint, isReplacingWaypoint, isInsertingNext);
             }
 
             // Skip original since we need to manage waypoints to keep track of any orders that need to be resolved
             return false;
         }
 
-        private static void HandleAddingWaypoint(OrderWaypoint? existingWaypoint, BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacingWaypoint, bool isInsertingNext)
+        private static void HandleAddingWaypoint(BaseLocomotive loco, OrderWaypoint? existingWaypoint, OrderWaypoint newWaypoint, bool isReplacingWaypoint, bool isInsertingNext)
         {
             if (existingWaypoint != null)
             {
@@ -80,9 +87,9 @@ namespace WaypointQueue
             }
 
             // Always add the waypoint to the queue
-            if (location != null)
+            if (!string.IsNullOrEmpty(newWaypoint.LocationString))
             {
-                WaypointQueueController.Shared.AddWaypoint(loco, location, coupleToCarId, isReplacingWaypoint, isInsertingNext);
+                WaypointQueueController.Shared.AddWaypoint(loco, newWaypoint, isReplacingWaypoint, isInsertingNext);
             }
         }
 

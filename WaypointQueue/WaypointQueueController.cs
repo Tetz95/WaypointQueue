@@ -297,18 +297,19 @@ namespace WaypointQueue
             return false;
         }
 
-        public void AddWaypoint(BaseLocomotive loco, Location location, string coupleToCarId, bool isReplacing, bool isInsertingNext)
+        public void AddWaypoint(BaseLocomotive loco, OrderWaypoint orderWaypoint, bool isReplacing, bool isInsertingNext)
         {
+            Location location = Graph.Shared.ResolveLocationString(orderWaypoint.LocationString);
             Location clampedLocation = location.Clamped();
-            bool isCoupling = coupleToCarId != null && coupleToCarId.Length > 0;
-            string couplingLogSegment = isCoupling ? $"coupling to ${coupleToCarId}" : "no coupling";
+
+            string couplingLogSegment = orderWaypoint.WantsCouple ? $"coupling to ${orderWaypoint.CoupleToCarId}" : "no coupling";
             string actionName = "add";
             if (isReplacing) actionName = "replace";
             if (isInsertingNext) actionName = "insert next";
             ModLocator.Loader.Log($"Trying to {actionName} waypoint for loco {loco.Ident} to {clampedLocation} with {couplingLogSegment}");
 
             LocoWaypointState entry = ModStateManager.Shared.GetLocoWaypointState(loco.id);
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupleToCarId);
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, orderWaypoint);
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             if (isReplacing && entry.Waypoints.Count > 0)
@@ -344,8 +345,11 @@ namespace WaypointQueue
         public void InsertWaypoint(BaseLocomotive loco, Location location, string coupledToCarId, string beforeWaypointId)
         {
             Location clampedLocation = location.Clamped();
-            LocoWaypointState locoState = ModStateManager.Shared.GetLocoWaypointState(loco.id); ;
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, location, coupledToCarId);
+            LocoWaypointState locoState = ModStateManager.Shared.GetLocoWaypointState(loco.id);
+
+            OrderWaypoint orderWaypoint = new OrderWaypoint(Graph.LocationToString(location), coupledToCarId);
+
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, orderWaypoint);
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             int beforeWaypointIndex = locoState.Waypoints?.FindIndex(w => w.Id == beforeWaypointId) ?? 0;
@@ -559,8 +563,11 @@ namespace WaypointQueue
 
             state.UnresolvedWaypoint = waypoint;
 
+            // Default to zero body length so it doesn't use a potentially outdated body length from when the waypoint was originally placed
+            OrderWaypoint orderWaypoint = new OrderWaypoint(waypoint.LocationString, waypoint.CoupleToCarId, waypoint.ArrivingEnd, waypoint.BodyToward, waypoint.RequiredTurns, bodyLength: 0f, waypoint.CoupleToCarEnd);
+
             ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location}");
-            _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId);
+            _autoEngineerService.SendToWaypoint(ordersHelper, orderWaypoint);
 
             _waypointResolver.ApplyTimetableSymbolIfRequested(waypoint);
 
