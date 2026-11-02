@@ -123,6 +123,10 @@ namespace WaypointQueue.Settings
         // rear in the plant and waits there.
         public bool ReverseClearOfInterlockings = true;
 
+        // The pose picked for a waypoint (arriving end, side, turns) goes out with its order. On by default in this fork,
+        // whose picker sets poses; upstream 2.1.1 made it an experimental option, off by default.
+        public bool EnableWaypointOrientationFeature = true;
+
         public static WaypointQueueSettings Load()
         {
             WaypointQueueSettings settings = null;

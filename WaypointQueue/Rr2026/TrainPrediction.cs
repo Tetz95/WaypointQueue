@@ -101,7 +101,7 @@ namespace WaypointQueue
         private ConsistEnd ArriveAt(ManagedWaypoint wp)
         {
             Location mark = wp.Location;
-            QueuedPose pose = wp.Pose;
+            QueuedPose pose = ModLocator.Settings.EnableWaypointOrientationFeature ? wp.Pose : null;   // as the order goes out
             if (pose != null && pose.IsPosed && pose.ArrivingEnd != 0 && pose.BodyToward != 0)
             {
                 ConsistEnd posedEnd = pose.ArrivingEnd == (int)WaypointEnd.A ? ConsistEnd.A : ConsistEnd.B;

@@ -674,7 +674,9 @@ namespace WaypointQueue
                 return;
             }
 
-            QueuedPose pose = waypoint.Pose;
+            // A picked pose goes out only with the orientation option on (upstream 2.1.1's experimental setting); the pose
+            // this method makes for sending the train past the waypoint below doesn't depend on it.
+            QueuedPose pose = ModLocator.Settings.EnableWaypointOrientationFeature ? waypoint.Pose : null;
             // 2026.1 places the train past the waypoint itself (the "train past it" pose), so the move past isn't a
             // second order after arriving. A pose the player picked already says where the train stands.
             if (!waypoint.StopAtWaypoint && waypoint.MoveTrainPastWaypoint && !waypoint.HasAnyCouplingOrders)
