@@ -28,14 +28,17 @@ namespace WaypointQueue.UI
 
         private static readonly AccessTools.FieldRef<AutoEngineerDestinationPicker, int> PoseIndexRef =
             AccessTools.FieldRefAccess<AutoEngineerDestinationPicker, int>("_poseIndex");
+        private static readonly AccessTools.FieldRef<AutoEngineerDestinationPicker, bool> IsPickingRef =
+            AccessTools.FieldRefAccess<AutoEngineerDestinationPicker, bool>("_isPicking");
 
-        // The picker's name for the orientation being committed, as its prompt shows it.
+        // The picker's name for the orientation being committed, as its prompt shows it; null when the picker isn't
+        // picking (a waypoint set some other way, whose pose the picker's last index doesn't describe).
         public static string PoseLabel
         {
             get
             {
                 var picker = AutoEngineerDestinationPicker.Shared;
-                int index = picker == null ? -1 : PoseIndexRef(picker);
+                int index = picker == null || !IsPickingRef(picker) ? -1 : PoseIndexRef(picker);
                 return index >= 0 && index < WaypointPoseCycle.Options.Length ? WaypointPoseCycle.Options[index].Label : null;
             }
         }
