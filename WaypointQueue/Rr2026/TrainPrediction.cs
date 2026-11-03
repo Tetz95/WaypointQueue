@@ -10,6 +10,7 @@ using UnityEngine;
 using WaypointQueue.Model;
 using WaypointQueue.Services;
 using WaypointQueue.State;
+using WaypointQueue.Wrappers;
 
 namespace WaypointQueue
 {
@@ -86,6 +87,12 @@ namespace WaypointQueue
             ConsistEnd arriving = ArriveAt(wp);
 
             Car coupleTo = CouplingTarget(wp);
+            if (coupleTo == null && wp.WillSeekNearestCoupling && !wp.IsCoupling)
+            {
+                // The car standing there now, found as CouplingService will look for it; with a pick-up by count the
+                // count comes from its cut (Couple).
+                coupleTo = NearestCar(wp, arriving);
+            }
             if (coupleTo != null && !Cars.Contains(coupleTo))
             {
                 Couple(coupleTo, arriving, wp);
@@ -109,6 +116,16 @@ namespace WaypointQueue
                 StandAt(posedEnd, intoBody);
                 Legs.Add($"{DescribeMark(wp)}: end {posedEnd} arrives (picked pose)");
                 return posedEnd;
+            }
+
+            // A coupling without a pose goes out as the game's coupling order: the train comes up to the car's coupler from
+            // outside the car. The route search doesn't see cars, so the shortest route can come in through the car
+            // and put the train on its far side with the wrong end leading; take the route from outside if there is one.
+            if (CarToCouple(wp) is Car car && !Cars.Contains(car) && TryRouteFromOutside(mark, car, out ConsistEnd outsideEnd, out Location outsideBody))
+            {
+                StandAt(outsideEnd, outsideBody);
+                Legs.Add($"{DescribeMark(wp)}: end {outsideEnd} arrives (coupling from outside the car)");
+                return outsideEnd;
             }
 
             if (TryRoute(mark, out List<RouteSearch.Step> route))
@@ -150,6 +167,47 @@ namespace WaypointQueue
                 }
             }
             return best != null;
+        }
+
+        // The car a waypoint couples to, if it names one (CouplingTarget without its guesses).
+        private static Car CarToCouple(ManagedWaypoint wp)
+        {
+            if (wp.IsCoupling && wp.TryResolveCoupleToCar(out Car car))
+            {
+                return car;
+            }
+            return wp.WillSeekSpecificCarCoupling ? wp.CouplingSearchResultCar : null;
+        }
+
+        // The shorter of the routes from the train's two ends that comes up to the mark from the side away from the car,
+        // with the end that leads in and the mark facing into the train's body.
+        private bool TryRouteFromOutside(Location mark, Car car, out ConsistEnd arriving, out Location intoBody)
+        {
+            arriving = ConsistEnd.A;
+            intoBody = default;
+            Location towardA = WaypointPose.IntoBody(mark, TrackSegment.End.A);
+            Location towardB = WaypointPose.IntoBody(mark, TrackSegment.End.B);
+            Vector3 carMiddle = Middle(car);
+            Vector3 probeA = _graph.GetPosition(_graph.LocationByMoving(towardA, 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            Vector3 probeB = _graph.GetPosition(_graph.LocationByMoving(towardB, 5f, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+            Location awayFromCar = (probeA - carMiddle).sqrMagnitude >= (probeB - carMiddle).sqrMagnitude ? towardA : towardB;
+
+            float bestDistance = float.MaxValue;
+            bool found = false;
+            foreach ((Location start, ConsistEnd startEnd) in new[] { (_endA, ConsistEnd.A), (_endB, ConsistEnd.B) })
+            {
+                var steps = new List<RouteSearch.Step>();
+                if (_graph.FindRoute(start, mark, HeuristicCosts.AutoEngineer, steps, out RouteSearch.Metrics metrics,
+                        checkForCars: false, trainLength: Length, startEnd: startEnd) && steps.Count > 0 && metrics.Distance < bestDistance
+                    && IntoBodyFromRoute(mark, steps).Equals(awayFromCar))
+                {
+                    arriving = steps[steps.Count - 1].LeadingEnd;
+                    intoBody = awayFromCar;
+                    bestDistance = metrics.Distance;
+                    found = true;
+                }
+            }
+            return found;
         }
 
         // The mark, facing into the train's body as it stands after the route: toward the side it came in from.
@@ -205,6 +263,58 @@ namespace WaypointQueue
                 Guesses.Add("couples to the nearest car at " + DescribeMark(wp));
             }
             return null;
+        }
+
+        // The nearest car for a "couple to nearest" waypoint, searched as CouplingService.FindNearbyCoupling does but from
+        // the predicted train: along the track ahead of its arriving end, or within the search radius of the mark.
+        private Car NearestCar(ManagedWaypoint wp, ConsistEnd arriving)
+        {
+            var trains = ModLocator.ServiceProvider.GetService<TrainControllerWrapper>();
+            if (trains == null)
+            {
+                return null;
+            }
+            const float averageCarLength = 12.2f;   // CouplingService.AverageCarLengthMeters
+            float searchRadius = ModLocator.Settings.NearbyCouplingSearchDistanceInCarLengths * averageCarLength;
+            if (wp.OnlySeekNearbyOnTrackAhead)
+            {
+                // The arriving end faces out of the train (StandAt), so moving from it runs ahead of the train.
+                Location ahead = arriving == ConsistEnd.A ? _endA : _endB;
+                for (float moved = averageCarLength / 2; moved <= searchRadius; moved += averageCarLength / 2)
+                {
+                    try
+                    {
+                        Car car = trains.CheckForCarAtLocation(_graph.LocationByMoving(ahead, moved, checkSwitchAgainstMovement: false, stopAtEndOfTrack: true));
+                        if (car != null && !Cars.Contains(car))
+                        {
+                            return car;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        break;
+                    }
+                }
+                return null;
+            }
+
+            Car best = null;
+            float bestDistance = float.MaxValue;
+            foreach (string carId in trains.GetNearbyCarIds(wp.Location, searchRadius))
+            {
+                if (!trains.TryGetCarForId(carId, out Car car) || Cars.Contains(car) || (car.EndGearA.IsCoupled && car.EndGearB.IsCoupled))
+                {
+                    continue;
+                }
+                Vector3 markPosition = _graph.GetPosition(wp.Location);
+                float distance = Mathf.Min((_graph.GetPosition(car.LocationA) - markPosition).magnitude, (_graph.GetPosition(car.LocationB) - markPosition).magnitude);
+                if (distance < bestDistance)
+                {
+                    best = car;
+                    bestDistance = distance;
+                }
+            }
+            return best;
         }
 
         // The coupled car's whole cut joins at the arriving end; then any cut after the coupling.
