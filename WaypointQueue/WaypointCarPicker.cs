@@ -13,6 +13,7 @@ namespace WaypointQueue
         private Action<ManagedWaypoint> _onWaypointChange;
         private Coroutine _coroutine;
         private bool _carWasPicked;
+        private bool _escapeRegistered;
         private bool _forUncoupling;
 
         private static WaypointCarPicker _shared;
@@ -52,6 +53,7 @@ namespace WaypointQueue
             ShowMessage($"Click a car to set {(_forUncoupling ? "uncoupling" : "coupling")} target");
 
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
+            _escapeRegistered = true;
         }
 
         public void PickCar(Car car)
@@ -100,7 +102,12 @@ namespace WaypointQueue
                 _coroutine = null;
             }
 
-            GameInput.UnregisterEscapeHandler(GameInput.EscapeHandler.Transient);
+            // Only its own handler: removing another picker's (the game's waypoint picker) left Escape opening the pause menu.
+            if (_escapeRegistered)
+            {
+                GameInput.UnregisterEscapeHandler(GameInput.EscapeHandler.Transient);
+                _escapeRegistered = false;
+            }
         }
 
         private void ShowMessage(string message)

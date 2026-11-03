@@ -45,6 +45,7 @@ namespace WaypointQueue.UI
 
         // Pose of the pick being handled (2026.1's picker); null for a pick without one.
         private QueuedPose _pickedPose;
+        private bool _escapeRegistered;
 
         private static WaypointPicker _shared;
         public static WaypointPicker Shared
@@ -126,6 +127,7 @@ namespace WaypointQueue.UI
             ShowMessage(message);
 
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
+            _escapeRegistered = true;
         }
 
         public void StartInsertingWaypoint(ManagedWaypoint beforeWaypoint, Action<ManagedWaypoint, string> onWaypointInsert, bool forRoute = false)
@@ -169,6 +171,7 @@ namespace WaypointQueue.UI
             ShowMessage(message);
 
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
+            _escapeRegistered = true;
         }
 
         public void StartPickingWaypointForRoute(Action<ManagedWaypoint, string> onWaypointInsert, string routeId)
@@ -196,6 +199,7 @@ namespace WaypointQueue.UI
             ShowMessage("Click to add a waypoint for route");
 
             GameInput.RegisterEscapeHandler(GameInput.EscapeHandler.Transient, DidEscape);
+            _escapeRegistered = true;
         }
 
         // Picks with the game's picker, so the pose can be chosen. Route waypoints need a selected locomotive to size
@@ -291,7 +295,13 @@ namespace WaypointQueue.UI
                 _coroutine = null;
             }
 
-            GameInput.UnregisterEscapeHandler(GameInput.EscapeHandler.Transient);
+            // Only the handler this picker registered: a pick made with the game's picker leaves the game's own (Transient)
+            // handler in place, and removing it left Escape opening the pause menu instead of cancelling the pick.
+            if (_escapeRegistered)
+            {
+                GameInput.UnregisterEscapeHandler(GameInput.EscapeHandler.Transient);
+                _escapeRegistered = false;
+            }
         }
 
         private IEnumerator Loop()
