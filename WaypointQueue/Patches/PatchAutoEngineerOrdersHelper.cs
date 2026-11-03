@@ -29,7 +29,7 @@ namespace WaypointQueue
                 return false;
             }
             Location location = Graph.Shared.ResolveLocationString(waypoint.LocationString);
-            _pickedPose = QueuedPose.From(waypoint, GamePickerRedirect.PoseChosen);
+            _pickedPose = QueuedPose.From(waypoint, GamePickerRedirect.PoseChosen, GamePickerRedirect.PoseLabel);
             try
             {
                 return SetWaypointPrefix(location, waypoint.CoupleToCarId, ref ____locomotive, ref ____persistence);

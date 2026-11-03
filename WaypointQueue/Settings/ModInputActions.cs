@@ -28,6 +28,9 @@ namespace WaypointQueue.Settings
         // Setting a waypoint with this activated will create a waypoint with kicking enabled
         public InputAction kickingShortcut;
 
+        // Picking a waypoint with this held keeps it on the track instead of snapping it to a nearby car's coupler
+        public InputAction noCouplingShortcut;
+
         public InputAction toggleWaypointPanel;
 
         public InputAction toggleRoutesPanel;
@@ -49,6 +52,7 @@ namespace WaypointQueue.Settings
             coupleToNearestShortcut = map.FindAction("CoupleToNearestShortcut", true);
             uncoupleShortcut = map.FindAction("UncoupleShortcut", true);
             kickingShortcut = map.FindAction("KickingShortcut", true);
+            noCouplingShortcut = map.FindAction("NoCouplingShortcut", true);
             toggleWaypointPanel = map.FindAction("ToggleWaypointPanel", true);
             toggleRoutesPanel = map.FindAction("ToggleRoutesPanel", true);
         }
@@ -57,11 +61,11 @@ namespace WaypointQueue.Settings
         {
             if (ModLocator.Settings.UseLegacyHotkeyOptions)
             {
-                return [appendWaypointMode, replaceWaypointMode, insertNextWaypointMode, toggleWaypointPanel, toggleRoutesPanel];
+                return [appendWaypointMode, replaceWaypointMode, insertNextWaypointMode, noCouplingShortcut, toggleWaypointPanel, toggleRoutesPanel];
             }
             else
             {
-                return [coupleToNearestShortcut, uncoupleShortcut, kickingShortcut, toggleWaypointPanel, toggleRoutesPanel];
+                return [coupleToNearestShortcut, uncoupleShortcut, kickingShortcut, noCouplingShortcut, toggleWaypointPanel, toggleRoutesPanel];
             }
         }
 

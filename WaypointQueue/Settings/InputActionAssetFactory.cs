@@ -16,6 +16,7 @@ namespace WaypointQueue.Settings
             map.AddAction("CoupleToNearestShortcut", InputActionType.Button, "<Keyboard>/leftCtrl");
             map.AddAction("UncoupleShortcut", InputActionType.Button, "<Keyboard>/leftAlt");
             map.AddAction("KickingShortcut", InputActionType.Button, "<Keyboard>/leftShift");
+            map.AddAction("NoCouplingShortcut", InputActionType.Button, "<Keyboard>/rightAlt");
 
             var toggleWaypointPanel = map.AddAction("ToggleWaypointPanel", InputActionType.Button);
             toggleWaypointPanel.AddCompositeBinding("ButtonWithOneModifier")

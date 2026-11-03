@@ -32,6 +32,11 @@ namespace WaypointQueue.Model
         // Train length the placement was planned for, in metres; 0 when nothing was placed.
         [JsonProperty] public float BodyLength { get; set; }
 
+        // The orientation as the picker named it when the player chose it ("Back of train on the mark, train short of
+        // it"). Short of and past are seen from where the train comes from at that point in the queue (the predicted
+        // train), which a description worked out later from the locomotive as it stands can't know.
+        [JsonProperty] public string Label { get; set; }
+
         [JsonIgnore] public bool IsPosed => ArrivingEnd != 0 || BodyToward != 0;
 
         [JsonIgnore] public bool IsEmpty => !IsPosed && CoupleToCarEnd == null && BodyLength <= 0f;
@@ -43,6 +48,7 @@ namespace WaypointQueue.Model
             CoupleToCarEnd = CoupleToCarEnd,
             Turns = Turns?.ToArray(),
             BodyLength = BodyLength,
+            Label = Label,
         };
 
         public bool SameAs(QueuedPose other)
@@ -62,6 +68,7 @@ namespace WaypointQueue.Model
             };
             if (CoupleToCarEnd.HasValue) dictionary["cplEnd"] = Value.Int(CoupleToCarEnd.Value);
             if (Turns != null && Turns.Length > 0) dictionary["turns"] = Value.Array(Turns.Select(t => Value.String(t)).ToList());
+            if (!string.IsNullOrEmpty(Label)) dictionary["label"] = Value.String(Label);
             return Value.Dictionary(dictionary);
         }
 
@@ -75,6 +82,7 @@ namespace WaypointQueue.Model
                 BodyLength = value["blen"].FloatValue,
                 CoupleToCarEnd = value["cplEnd"].IsNull ? null : value["cplEnd"].IntValue,
                 Turns = value["turns"].IsNull ? null : value["turns"].ArrayValue.Select(v => v.StringValue).ToArray(),
+                Label = value["label"].IsNull ? null : value["label"].StringValue,
             };
             return pose.IsEmpty ? null : pose;
         }
@@ -82,7 +90,7 @@ namespace WaypointQueue.Model
         // The pose of a pick. Unless the player chose one (Space while picking), the picker offers the way the train
         // would arrive from where it stands now; a queued waypoint runs from wherever the earlier ones leave the train,
         // and holding it to that pose could send it off to be turned. Only the end of a car to couple to is kept then.
-        public static QueuedPose From(OrderWaypoint waypoint, bool poseChosen)
+        public static QueuedPose From(OrderWaypoint waypoint, bool poseChosen, string label = null)
         {
             var pose = new QueuedPose
             {
@@ -94,6 +102,7 @@ namespace WaypointQueue.Model
                 pose.BodyToward = (int)waypoint.BodyToward;
                 pose.Turns = OrderWaypoint.EncodeTurns(waypoint.RequiredTurns);
                 pose.BodyLength = waypoint.BodyLength;
+                pose.Label = label;
             }
             return pose.IsEmpty ? null : pose;
         }
@@ -106,6 +115,12 @@ namespace WaypointQueue.Model
             if (!IsPosed)
             {
                 return null;
+            }
+            int junctions = Turns == null ? 0 : Turns.Length / 3;
+            string over = junctions > 0 ? $" (over {junctions} junction{(junctions == 1 ? "" : "s")})" : "";
+            if (!string.IsNullOrEmpty(Label))
+            {
+                return Label + over;
             }
             string end = ArrivingEnd == 0 ? "Either end of train" : "End " + ((WaypointEnd)ArrivingEnd) + " of train";
             string side = BodyToward == 0 ? "" : ", train lies toward segment end " + (BodyToward == 1 ? "A" : "B");
@@ -123,8 +138,6 @@ namespace WaypointQueue.Model
                     side = shortOf ? ", train short of it" : ", train past it";
                 }
             }
-            int junctions = Turns == null ? 0 : Turns.Length / 3;
-            string over = junctions > 0 ? $" (over {junctions} junction{(junctions == 1 ? "" : "s")})" : "";
             return end + " on the mark" + side + over;
         }
 

@@ -26,6 +26,20 @@ namespace WaypointQueue.UI
         // picker's default (the way the train would arrive from where it is now).
         public static bool PoseChosen => AutoEngineerDestinationPicker.Shared != null && PoseChosenRef(AutoEngineerDestinationPicker.Shared);
 
+        private static readonly AccessTools.FieldRef<AutoEngineerDestinationPicker, int> PoseIndexRef =
+            AccessTools.FieldRefAccess<AutoEngineerDestinationPicker, int>("_poseIndex");
+
+        // The picker's name for the orientation being committed, as its prompt shows it.
+        public static string PoseLabel
+        {
+            get
+            {
+                var picker = AutoEngineerDestinationPicker.Shared;
+                int index = picker == null ? -1 : PoseIndexRef(picker);
+                return index >= 0 && index < WaypointPoseCycle.Options.Length ? WaypointPoseCycle.Options[index].Label : null;
+            }
+        }
+
         public static bool Start(BaseLocomotive locomotive, Action<Location, string, QueuedPose> onPicked)
         {
             var picker = AutoEngineerDestinationPicker.Shared;
@@ -49,7 +63,7 @@ namespace WaypointQueue.UI
                 return false;
             }
             _pending = null;
-            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint, PoseChosen));
+            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint, PoseChosen, PoseLabel));
             return true;
         }
 
