@@ -373,11 +373,13 @@ namespace WaypointQueue
             RestartCoroutine();
         }
 
-        public void InsertWaypoint(BaseLocomotive loco, Location location, string coupledToCarId, string beforeWaypointId)
+        public void InsertWaypoint(BaseLocomotive loco, Location location, string coupledToCarId, string beforeWaypointId, QueuedPose pose = null)
         {
             Location clampedLocation = location.Clamped();
             LocoWaypointState locoState = ModStateManager.Shared.GetLocoWaypointState(loco.id); ;
-            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupledToCarId);
+            // The pose picked with the insert goes with it, as for an added waypoint; without it an inserted waypoint went
+            // out with no pose and the game chose the train's direction itself.
+            ManagedWaypoint waypoint = new ManagedWaypoint(loco, clampedLocation, coupledToCarId) { Pose = pose };
             _refuelService.CheckNearbyFuelLoaders(waypoint);
 
             int beforeWaypointIndex = locoState.Waypoints?.FindIndex(w => w.Id == beforeWaypointId) ?? 0;

@@ -360,7 +360,7 @@ namespace WaypointQueue.UI
 
         private void OnWaypointInsert(ManagedWaypoint waypoint, string beforeWaypointId)
         {
-            WaypointQueueController.Shared.InsertWaypoint(waypoint.Locomotive, waypoint.Location, waypoint.CoupleToCarId, beforeWaypointId);
+            WaypointQueueController.Shared.InsertWaypoint(waypoint.Locomotive, waypoint.Location, waypoint.CoupleToCarId, beforeWaypointId, waypoint.Pose);
         }
 
         private void CachePanelBuilderByWaypointId(string waypointId, UIPanelBuilder builder)
