@@ -537,8 +537,15 @@ namespace WaypointQueue.State
                 string oldCoupleId = oldOrdersCoupleToCarId ?? "";
                 string newCoupleId = newState.UnresolvedWaypoint.CoupleToCarId ?? "";
 
-                if (!AutoEngineerService.SameMark(oldLocString, newLocString) || oldCoupleId != newCoupleId)
+                // A new pose on the same mark is a change too: re-picking a waypoint to turn the train round kept the
+                // old order otherwise.
+                QueuedPose oldPose = oldState.UnresolvedWaypoint.Pose;
+                QueuedPose newPose = newState.UnresolvedWaypoint.Pose;
+                bool poseChanged = newPose == null ? !(oldPose?.IsEmpty ?? true) : !newPose.SameAs(oldPose);
+
+                if (!AutoEngineerService.SameMark(oldLocString, newLocString) || oldCoupleId != newCoupleId || poseChanged)
                 {
+                    ModLocator.Loader.Log($"{newState.Locomotive?.Ident}: first waypoint adjusted{(poseChanged ? " (pose)" : "")}, sending it again");
                     WaypointQueueController.Shared.SendToFirstWaypoint(newState);
                     return;
                 }
