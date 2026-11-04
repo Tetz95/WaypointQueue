@@ -45,6 +45,8 @@ namespace WaypointQueue
 
         private readonly IGraphView _graph = Graph.Shared.Current;
 
+        private BaseLocomotive _locomotive;
+
         public static TrainPrediction ForQueueIndex(BaseLocomotive locomotive, int index)
         {
             var prediction = new TrainPrediction();
@@ -68,6 +70,7 @@ namespace WaypointQueue
 
         private void Start(BaseLocomotive locomotive)
         {
+            _locomotive = locomotive;
             Cars = [.. locomotive.EnumerateCoupled(Car.LogicalEnd.A)];
             Car first = Cars[0], last = Cars[Cars.Count - 1];
             _endA = OutwardEnd(first, Cars.Count > 1 ? Cars[1] : null);
@@ -111,7 +114,9 @@ namespace WaypointQueue
             QueuedPose pose = ModLocator.Settings.EnableWaypointOrientationFeature ? wp.Pose : null;   // as the order goes out
             if (pose != null && pose.IsPosed && pose.ArrivingEnd != 0 && pose.BodyToward != 0)
             {
-                ConsistEnd posedEnd = pose.ArrivingEnd == (int)WaypointEnd.A ? ConsistEnd.A : ConsistEnd.B;
+                // The predicted cars are in the train's order as it stands now, so the picked front or back is placed
+                // from the locomotive as it is now too.
+                ConsistEnd posedEnd = pose.ArrivingEndFor(_locomotive) == (int)WaypointEnd.A ? ConsistEnd.A : ConsistEnd.B;
                 Location intoBody = WaypointPose.IntoBody(mark, WaypointPose.ToSegmentEnd((BodyToward)pose.BodyToward));
                 StandAt(posedEnd, intoBody);
                 Legs.Add($"{DescribeMark(wp)}: end {posedEnd} arrives (picked pose)");

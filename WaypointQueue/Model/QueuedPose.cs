@@ -37,6 +37,13 @@ namespace WaypointQueue.Model
         // train), which a description worked out later from the locomotive as it stands can't know.
         [JsonProperty] public string Label { get; set; }
 
+        // Whether the arriving end is the locomotive's front (true) or back (false), noted when picked. The consist end
+        // alone (ArrivingEnd) isn't enough: when a coupling or a cut rebuilds the train, the game lines its cars up again
+        // (IntegrationSet reverses cars to the set's direction), so the locomotive's front can move from consist end A
+        // to B between the pick and the send, and a "front on the mark" pick then arrived back first. Null for poses
+        // saved before this was kept (their consist end is used as it is).
+        [JsonProperty] public bool? FrontOnMark { get; set; }
+
         [JsonIgnore] public bool IsPosed => ArrivingEnd != 0 || BodyToward != 0;
 
         [JsonIgnore] public bool IsEmpty => !IsPosed && CoupleToCarEnd == null && BodyLength <= 0f;
@@ -49,12 +56,13 @@ namespace WaypointQueue.Model
             Turns = Turns?.ToArray(),
             BodyLength = BodyLength,
             Label = Label,
+            FrontOnMark = FrontOnMark,
         };
 
         public bool SameAs(QueuedPose other)
         {
             if (other == null) return IsEmpty;
-            return ArrivingEnd == other.ArrivingEnd && BodyToward == other.BodyToward && CoupleToCarEnd == other.CoupleToCarEnd
+            return ArrivingEnd == other.ArrivingEnd && FrontOnMark == other.FrontOnMark && BodyToward == other.BodyToward && CoupleToCarEnd == other.CoupleToCarEnd
                 && BodyLength.Equals(other.BodyLength) && (Turns ?? []).SequenceEqual(other.Turns ?? []);
         }
 
@@ -69,6 +77,7 @@ namespace WaypointQueue.Model
             if (CoupleToCarEnd.HasValue) dictionary["cplEnd"] = Value.Int(CoupleToCarEnd.Value);
             if (Turns != null && Turns.Length > 0) dictionary["turns"] = Value.Array(Turns.Select(t => Value.String(t)).ToList());
             if (!string.IsNullOrEmpty(Label)) dictionary["label"] = Value.String(Label);
+            if (FrontOnMark.HasValue) dictionary["front"] = Value.Bool(FrontOnMark.Value);
             return Value.Dictionary(dictionary);
         }
 
@@ -83,6 +92,7 @@ namespace WaypointQueue.Model
                 CoupleToCarEnd = value["cplEnd"].IsNull ? null : value["cplEnd"].IntValue,
                 Turns = value["turns"].IsNull ? null : value["turns"].ArrayValue.Select(v => v.StringValue).ToArray(),
                 Label = value["label"].IsNull ? null : value["label"].StringValue,
+                FrontOnMark = value["front"].IsNull ? null : value["front"].BoolValue,
             };
             return pose.IsEmpty ? null : pose;
         }
@@ -91,7 +101,7 @@ namespace WaypointQueue.Model
         // the train goes as it was shown (the user's choice, 2026-11-03: left to the game, a pose it wasn't shown could
         // turn the train or couple with the other end). The picker shows the train as predicted at that point in the
         // queue, so the default already starts from where the earlier waypoints leave it.
-        public static QueuedPose From(OrderWaypoint waypoint, bool poseChosen, string label = null)
+        public static QueuedPose From(OrderWaypoint waypoint, bool poseChosen, string label = null, BaseLocomotive locomotive = null)
         {
             var pose = new QueuedPose
             {
@@ -102,6 +112,7 @@ namespace WaypointQueue.Model
                 BodyLength = waypoint.BodyLength,
                 Label = label,
             };
+            pose.NoteFront(locomotive);
             return pose.IsEmpty ? null : pose;
         }
 
@@ -126,7 +137,7 @@ namespace WaypointQueue.Model
             {
                 if (ArrivingEnd != 0)
                 {
-                    bool front = PosedWaypoint.ToWaypointEnd(PosedWaypoint.FrontEnd(locomotive)) == (WaypointEnd)ArrivingEnd;
+                    bool front = FrontOnMark ?? PosedWaypoint.ToWaypointEnd(PosedWaypoint.FrontEnd(locomotive)) == (WaypointEnd)ArrivingEnd;
                     end = front ? "Front of train" : "Back of train";
                 }
                 if (BodyToward != 0)
@@ -174,12 +185,44 @@ namespace WaypointQueue.Model
         // A train counts as the same length within half a metre (coupler slack, rounding).
         private const float SameLengthTolerance = 0.5f;
 
+        // Notes whether the arriving end is the locomotive's front, from the locomotive as it is when the pose is picked
+        // (the picker turned "front"/"back" into a consist end the same way, PosedWaypoint.FrontEnd).
+        public void NoteFront(BaseLocomotive locomotive)
+        {
+            if (locomotive != null && ArrivingEnd != 0)
+            {
+                FrontOnMark = ArrivingEnd == (int)PosedWaypoint.ToWaypointEnd(PosedWaypoint.FrontEnd(locomotive));
+            }
+        }
+
+        // Whether the locomotive's front arrives on the mark: as picked, or for a pose saved before that was kept, from the
+        // locomotive as it is now. Null without an arriving end.
+        public bool? IsFrontOnMark(BaseLocomotive locomotive)
+        {
+            if (FrontOnMark.HasValue || ArrivingEnd == 0 || locomotive == null)
+            {
+                return ArrivingEnd == 0 ? null : FrontOnMark;
+            }
+            return ArrivingEnd == (int)PosedWaypoint.ToWaypointEnd(PosedWaypoint.FrontEnd(locomotive));
+        }
+
+        // The consist end that arrives, for the train as it is now: the locomotive's front or back as picked.
+        public int ArrivingEndFor(BaseLocomotive locomotive)
+        {
+            if (!FrontOnMark.HasValue || ArrivingEnd == 0 || locomotive == null)
+            {
+                return ArrivingEnd;
+            }
+            ConsistEnd front = PosedWaypoint.FrontEnd(locomotive);
+            return (int)PosedWaypoint.ToWaypointEnd(FrontOnMark.Value ? front : front.Flipped());
+        }
+
         // The order to send the locomotive to the waypoint now. A placement picked for a train of the length it still
         // has goes out as picked; once cars have been picked up or set out since, the game plans the same pose again
         // for the train as it is (PosedWaypoint.Order walks the new length from the mark).
         public OrderWaypoint ToOrder(BaseLocomotive locomotive, Location mark, string locationString, string coupleToCarId)
         {
-            var end = (WaypointEnd)ArrivingEnd;
+            var end = (WaypointEnd)ArrivingEndFor(locomotive);
             var side = (Track.Search.BodyToward)BodyToward;
             Car.End? carEnd = CoupleToCarEnd.HasValue ? (Car.End)CoupleToCarEnd.Value : null;
             if (!IsPosed)

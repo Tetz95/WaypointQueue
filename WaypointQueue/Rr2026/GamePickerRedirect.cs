@@ -16,6 +16,7 @@ namespace WaypointQueue.UI
     internal static class GamePickerRedirect
     {
         private static Action<Location, string, QueuedPose> _pending;
+        private static BaseLocomotive _pendingLocomotive;
 
         public static bool IsPending => _pending != null;
 
@@ -52,6 +53,7 @@ namespace WaypointQueue.UI
             }
             picker.Cancel();
             _pending = onPicked;
+            _pendingLocomotive = locomotive;
             var ordersHelper = ModLocator.ServiceProvider.GetService<AutoEngineerService>().GetOrdersHelper(locomotive);
             picker.StartPickingLocation(locomotive, ordersHelper);
             return true;
@@ -66,7 +68,7 @@ namespace WaypointQueue.UI
                 return false;
             }
             _pending = null;
-            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint, PoseChosen, PoseLabel));
+            action(Graph.Shared.ResolveLocationString(waypoint.LocationString), waypoint.CoupleToCarId ?? "", QueuedPose.From(waypoint, PoseChosen, PoseLabel, _pendingLocomotive));
             return true;
         }
 

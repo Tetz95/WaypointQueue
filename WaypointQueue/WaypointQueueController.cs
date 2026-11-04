@@ -709,7 +709,7 @@ namespace WaypointQueue
             }
             else
             {
-                string poseText = pose == null || pose.IsEmpty ? "no pose" : $"pose end {pose.ArrivingEnd} side {pose.BodyToward} length {pose.BodyLength:0} m, {(pose.Turns?.Length ?? 0) / 3} turn(s)";
+                string poseText = pose == null || pose.IsEmpty ? "no pose" : $"pose end {pose.ArrivingEndFor(state.Locomotive)}{(pose.FrontOnMark.HasValue ? (pose.FrontOnMark.Value ? " (front)" : " (back)") : "")} side {pose.BodyToward} length {pose.BodyLength:0} m, {(pose.Turns?.Length ?? 0) / 3} turn(s)";
                 ModLocator.Loader.Log($"Sending next waypoint for {state.Locomotive?.Ident} to {waypoint.Location} ({poseText})");
                 _autoEngineerService.SendToWaypoint(ordersHelper, waypoint.Location, waypoint.CoupleToCarId, pose);
             }
