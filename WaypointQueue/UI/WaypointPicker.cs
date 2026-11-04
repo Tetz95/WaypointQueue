@@ -88,6 +88,11 @@ namespace WaypointQueue.UI
 
         public void StartAdjustingWaypoint(ManagedWaypoint waypoint, Action<ManagedWaypoint> onWaypointChange, bool forRoute = false)
         {
+            StartNextFrame(() => StartAdjustingWaypointNow(waypoint, onWaypointChange, forRoute));
+        }
+
+        private void StartAdjustingWaypointNow(ManagedWaypoint waypoint, Action<ManagedWaypoint> onWaypointChange, bool forRoute)
+        {
             if (_waypointMarker == null)
             {
                 InitWaypointMarker();
@@ -131,6 +136,11 @@ namespace WaypointQueue.UI
         }
 
         public void StartInsertingWaypoint(ManagedWaypoint beforeWaypoint, Action<ManagedWaypoint, string> onWaypointInsert, bool forRoute = false)
+        {
+            StartNextFrame(() => StartInsertingWaypointNow(beforeWaypoint, onWaypointInsert, forRoute));
+        }
+
+        private void StartInsertingWaypointNow(ManagedWaypoint beforeWaypoint, Action<ManagedWaypoint, string> onWaypointInsert, bool forRoute)
         {
             if (_waypointMarker == null)
             {
@@ -264,6 +274,21 @@ namespace WaypointQueue.UI
             ManagedWaypoint addedWaypoint = new ManagedWaypoint(null, location, coupleToCarId) { Pose = _pickedPose };
             _refuelService.CheckNearbyFuelLoaders(addedWaypoint);
             _onWaypointInsert(addedWaypoint, _routeId);
+        }
+
+        // These picks are started from a waypoint's options dropdown, which closes after its callback and then pops the
+        // top escape handler (the game's escape handlers are a stack). Started in the callback, the picker's handler was
+        // the one popped and the dropdown's stayed, pointing at a destroyed menu: Escape threw and did nothing, not even
+        // the pause menu. A frame later the dropdown has closed and removed its own.
+        private void StartNextFrame(Action start)
+        {
+            StartCoroutine(RunNextFrame(start));
+        }
+
+        private static IEnumerator RunNextFrame(Action start)
+        {
+            yield return null;
+            start();
         }
 
         public void Cancel()
