@@ -342,6 +342,21 @@ namespace WaypointQueue.UI
             });
         }
 
+        // Closest and furthest are measured from the waypoint's mark. With a pose the end of the train on the mark is
+        // known, so each option also names the end of the train it counts from: with "train past it" the end on the mark
+        // is the closest one, where the old "move train past the waypoint" counted from the train's far side.
+        private static List<string> WithTrainEnds(ManagedWaypoint waypoint, string closest, string furthest)
+        {
+            bool? frontOnMark = waypoint.Pose?.IsFrontOnMark(waypoint.Locomotive);
+            if (frontOnMark == null)
+            {
+                return [closest, furthest];
+            }
+            string onMark = frontOnMark.Value ? "front" : "back";
+            string away = frontOnMark.Value ? "back" : "front";
+            return [$"{closest} ({onMark} of train)", $"{furthest} ({away} of train)"];
+        }
+
         private void OnWaypointChange(ManagedWaypoint waypoint)
         {
             WaypointQueueController.Shared.UpdateWaypoint(waypoint);
@@ -1078,7 +1093,7 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
                 if (!waypoint.WillPostCoupleCutDropoff && !waypoint.WillPostCoupleCutPickup)
                 {
                     builder.AddField($"Count cars from",
-                    builder.AddDropdown(["Closest to waypoint", "Furthest from waypoint"], waypoint.CountUncoupledFromNearestToWaypoint ? 0 : 1, (int value) =>
+                    builder.AddDropdown(WithTrainEnds(waypoint, "Closest to waypoint", "Furthest from waypoint"), waypoint.CountUncoupledFromNearestToWaypoint ? 0 : 1, (int value) =>
                     {
                         waypoint.CountUncoupledFromNearestToWaypoint = !waypoint.CountUncoupledFromNearestToWaypoint;
                         onWaypointChange(waypoint);
@@ -1186,7 +1201,7 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
             AddLabelOnlyTooltip(excludeMatchingCarsFromCutField, "Exclude matching cars from cut", excludeMatchingCarsFromCutTooltip);
 
             string cutBlockLabel = "Cut block from";
-            List<string> cutBlockFromOptions = ["Closest end to waypoint", "Furthest end from waypoint"];
+            List<string> cutBlockFromOptions = WithTrainEnds(waypoint, "Closest end to waypoint", "Furthest end from waypoint");
 
             if (waypoint.WillPostCoupleCutDropoff || waypoint.WillPostCoupleCutPickup)
             {
