@@ -127,6 +127,10 @@ namespace WaypointQueue.Settings
         // whose picker sets poses; upstream 2.1.1 made it an experimental option, off by default.
         public bool EnableWaypointOrientationFeature = true;
 
+        public bool EnableVerboseLogging = true;
+
+        public bool DisableWindowRefreshOptimizations = true;
+
         public static WaypointQueueSettings Load()
         {
             WaypointQueueSettings settings = null;

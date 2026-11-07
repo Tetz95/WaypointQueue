@@ -843,17 +843,34 @@ namespace WaypointQueue
             if (waypoint.WillUncoupleBySpecificCar)
             {
                 carsToCut = isPickup
-                    ? uncouplingService.FindPickupBySpecificCar(waypoint, carCoupledTo) : uncouplingService.FindDropoffBySpecificCar(waypoint, carCoupledTo);
+                    ? uncouplingService.FindPickupBySpecificCar(waypoint, carCoupledTo)
+                    : uncouplingService.FindDropoffBySpecificCar(waypoint, carCoupledTo);
             }
 
             if (waypoint.WillUncoupleAllExceptLocomotives)
             {
                 carsToCut = isPickup
-                    ? uncouplingService.FindPickupAllExceptLocomotives(waypoint, carCoupledTo) : uncouplingService.FindDropoffAllExceptLocomotives(waypoint, carCoupledTo);
+                    ? uncouplingService.FindPickupAllExceptLocomotives(waypoint, carCoupledTo)
+                    : uncouplingService.FindDropoffAllExceptLocomotives(waypoint, carCoupledTo);
 
                 if (carsToCut.Count == 0 && isPickup)
                 {
                     ModLocator.Loader.Log($"Pickup all except locomotives found zero cars to cut.");
+                    return;
+                }
+            }
+
+            if (waypoint.WillUncoupleByWaybillStatus)
+            {
+                carsToCut = isPickup
+                    ? uncouplingService.FindPickupByWaybillStatus(waypoint, carCoupledTo)
+                    : uncouplingService.FindDropoffByWaybillStatus(waypoint, carCoupledTo);
+
+                if (!isPickup && carsToCut.Count == 0)
+                {
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to drop off with waybill status {waypoint.MatchWaybillStatus}, so it will remain coupled to all cars.";
+                    Console.Log(message);
+                    ModLocator.Loader.Log(message);
                     return;
                 }
             }
@@ -906,6 +923,19 @@ namespace WaypointQueue
             {
                 uncouplingService.UncoupleAllExceptLocomotives(waypoint);
                 return;
+            }
+
+            if (waypoint.WillUncoupleByWaybillStatus)
+            {
+                carsToCut = uncouplingService.FindCutByWaybillStatus(waypoint);
+
+                if (carsToCut.Count == 0)
+                {
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to cut with waybill status {waypoint.MatchWaybillStatus}, so no cars were uncoupled.";
+                    Console.Log(message);
+                    ModLocator.Loader.Log(message);
+                    return;
+                }
             }
 
             uncouplingService.PerformCut(carsToCut, waypoint);

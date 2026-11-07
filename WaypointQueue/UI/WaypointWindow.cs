@@ -6,7 +6,6 @@ using Model.Ops;
 using Model.Ops.Timetable;
 using Network;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -48,7 +47,6 @@ namespace WaypointQueue.UI
         private static CrewsPanelBuilder _crewsPanelBuilder => new();
 
         private string _selectedLocomotiveId;
-        private Coroutine _coroutine;
         private float _scrollPosition;
 
         private UIPanelBuilder _scrollViewBuilder;
@@ -83,6 +81,7 @@ namespace WaypointQueue.UI
             if (_customWindow == null)
             {
                 _customWindow = WindowManager.Shared.GetCustomWindow(WindowIdentifier);
+                WindowManager.Shared.RegisterActiveWindow(WindowIdentifier, _customWindow.Window);
             }
 
             // Queue changes aren't drawn while the window is closed (the update events skip a hidden window), so it
@@ -108,6 +107,7 @@ namespace WaypointQueue.UI
             EventBus.Subscribe<WaypointDidUpdate>(this, OnWaypointDidUpdate);
             EventBus.Subscribe<QueueDidUpdate>(this, OnQueueDidUpdate);
             EventBus.Subscribe<WaypointWasAppended>(this, OnWaypointWasAppended);
+            EventBus.Subscribe<SelectedCarChanged>(this, OnSelectedCarChanged);
             _carService = ModLocator.ServiceProvider.GetService<ICarService>();
         }
 
@@ -118,6 +118,7 @@ namespace WaypointQueue.UI
 
         private void OnQueueDidUpdate(QueueDidUpdate queueDidUpdateEvent)
         {
+            ModLocator.Loader.Log($"OnQueueDidUpdate for {queueDidUpdateEvent.LocomotiveId}");
             if (queueDidUpdateEvent.LocomotiveId == TrainController.Shared.SelectedLocomotive?.id && IsVisible)
             {
                 ModLocator.Loader.LogDebug($"Rebuilding full waypoint window for {TrainController.Shared.SelectedLocomotive?.Ident}");
@@ -127,6 +128,7 @@ namespace WaypointQueue.UI
 
         private void OnWaypointDidUpdate(WaypointDidUpdate waypointDidUpdateEvent)
         {
+            ModLocator.Loader.LogDebug($"OnWaypointDidUpdate for {waypointDidUpdateEvent.LocomotiveId}");
             if (waypointDidUpdateEvent.LocomotiveId == TrainController.Shared.SelectedLocomotive?.id && panelsByWaypointId.TryGetValue(waypointDidUpdateEvent.WaypointId, out UIPanelBuilder panelBuilder) && IsVisible)
             {
                 ModLocator.Loader.LogDebug($"Rebuilding single waypoint {waypointDidUpdateEvent.WaypointId} for {TrainController.Shared.SelectedLocomotive.Ident}");
@@ -136,6 +138,7 @@ namespace WaypointQueue.UI
 
         private void OnWaypointWasAppended(WaypointWasAppended waypointWasAppendedEvent)
         {
+            ModLocator.Loader.LogDebug($"OnWaypointWasAppended for {waypointWasAppendedEvent.LocomotiveId}");
             if (!String.IsNullOrEmpty(waypointWasAppendedEvent.RouteId))
             {
                 return;
@@ -201,55 +204,30 @@ namespace WaypointQueue.UI
             }
         }
 
-        private IEnumerator Ticker()
+        private void OnSelectedCarChanged(SelectedCarChanged _)
         {
-            WaitForSeconds t = new WaitForSeconds(0.2f);
-            while (true)
+            if (TrainController.Shared.SelectedLocomotive == null)
             {
-                yield return t;
-                Tick();
+                _selectedLocomotiveId = null;
             }
-        }
-
-        private void Tick()
-        {
+            // Drawn when it's next shown (Show rebuilds).
             if (!IsVisible)
             {
                 return;
             }
-            if (TrainController.Shared.SelectedLocomotive?.id != _selectedLocomotiveId)
-            {
-                if (TrainController.Shared.SelectedLocomotive == null)
-                {
-                    _selectedLocomotiveId = null;
-                }
-                ModLocator.Loader.LogDebug($"Selected locomotive changed, rebuilding waypoint window");
-                RebuildWithScroll();
-            }
+            ModLocator.Loader.LogDebug($"Selected locomotive changed, rebuilding waypoint window");
+            RebuildWithScroll();
         }
 
         public void Show()
         {
             ModLocator.Loader.LogDebug($"Rebuilding and showing waypoint panel");
             WindowManager.Shared.ShowWindow(WindowIdentifier);
-
-            if (_coroutine == null)
-            {
-                ModLocator.Loader.LogDebug($"Starting waypoint window coroutine");
-                _coroutine = StartCoroutine(Ticker());
-            }
         }
 
         public void Hide()
         {
             WindowManager.Shared.CloseWindow(WindowIdentifier);
-
-            if (_coroutine != null)
-            {
-                ModLocator.Loader.LogDebug($"Stopping waypoint window coroutine");
-                StopCoroutine(_coroutine);
-                _coroutine = null;
-            }
         }
 
         public void Populate(UIPanelBuilder builder)
@@ -492,6 +470,11 @@ namespace WaypointQueue.UI
                 if (!waypoint.HasAnyCouplingOrders && waypoint.WillUncoupleAllExceptLocomotives)
                 {
                     BuildUncoupleAllExceptLocomotive(waypoint, builder, onWaypointChange);
+                }
+
+                if (!waypoint.HasAnyCouplingOrders && waypoint.WillUncoupleByWaybillStatus)
+                {
+                    BuildUncoupleByWaybillStatusField(waypoint, builder, onWaypointChange);
                 }
 
                 if ((waypoint.HasAnyPostCouplingCutOrders || (!waypoint.IsCoupling && !waypoint.HasAnyUncouplingOrders)) && waypoint.CouplingSearchMode != ManagedWaypoint.CoupleSearchMode.None && !waypoint.CurrentlyWaiting)
@@ -1023,6 +1006,8 @@ return builder;
 
                 By specific car - Choose a specific car to uncouple and which direction to cut the consist.
 
+                By waybill status - Choose either complete or incomplete waybills to uncouple a block of cars with matching waybill status.
+
                 All except locomotives - Uncouples all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are cut with the cars.
                 """;
 
@@ -1041,6 +1026,8 @@ return builder;
                 By track destination - Choose a specific industry track to pickup a block of cars with destinations for that track.
                 
                 By specific car - Choose a specific car to pickup.
+
+                By waybill status - Choose either complete or incomplete waybills to pickup a block of cars with matching waybill status.
                 
                 All except locomotives - Pickup all cars except locomotives and tenders.
                 """;
@@ -1061,14 +1048,32 @@ return builder;
                 By track destination - Choose a specific industry track to dropoff a block of cars with destinations for that track.
                 
                 By specific car - Choose a specific car to dropoff.
+
+                By waybill status - Choose either complete or incomplete waybills to dropoff a block of cars with matching waybill status.
                 
                 All except locomotives - Dropoff all cars except the locomotives working the train (the lead and any locomotives MU'd to it) and their tenders. Locomotives hauled dead, in tow, are dropped with the cars.
                 """;
             }
 
-            var uncouplingModeField = builder.AddField(label, builder.AddDropdown(["None", "By count", "By area destination", "By industry destination", "By track destination", "By specific car", "All except locomotives"], (int)waypoint.UncouplingMode, (int value) =>
+            var uncoupleModeDropdownOrder = new List<(ManagedWaypoint.UncoupleMode, string)>
+            {
+                (ManagedWaypoint.UncoupleMode.None, "None" ),
+                (ManagedWaypoint.UncoupleMode.ByCount, "By count" ),
+                (ManagedWaypoint.UncoupleMode.ByDestinationArea, "By area destination" ),
+                (ManagedWaypoint.UncoupleMode.ByDestinationIndustry, "By industry destination" ),
+                (ManagedWaypoint.UncoupleMode.ByDestinationTrack, "By track destination" ),
+                (ManagedWaypoint.UncoupleMode.BySpecificCar, "By specific car" ),
+                (ManagedWaypoint.UncoupleMode.ByWaybillStatus, "By waybill status" ),
+                (ManagedWaypoint.UncoupleMode.AllExceptLocomotives, "All except locomotives" )
+            };
+
+            var uncoupleModeValues = uncoupleModeDropdownOrder.Select(x => x.Item1).ToList();
+            var uncoupleModeLabels = uncoupleModeDropdownOrder.Select(x => x.Item2).ToList();
+
+            int currentSelected = uncoupleModeValues.FindIndex(x => x == waypoint.UncouplingMode);
+            var uncouplingModeField = builder.AddField(label, builder.AddDropdown(uncoupleModeLabels, currentSelected, (int value) =>
                 {
-                    waypoint.UncouplingMode = (ManagedWaypoint.UncoupleMode)value;
+                    waypoint.UncouplingMode = uncoupleModeValues[value];
                     _opsDestinationOptionsByWaypointId.Remove(waypoint.Id);
                     onWaypointChange(waypoint);
                 }));
@@ -1115,6 +1120,39 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
                     }
                 });
             }
+
+            return builder;
+        }
+
+        private UIPanelBuilder BuildUncoupleByWaybillStatusField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
+        {
+            builder.HStack(delegate (UIPanelBuilder builder)
+            {
+                builder.AddField("Waybill status", builder.AddDropdown(["Completed waybills", "Incompleted waybills", "No waybills"], (int)waypoint.MatchWaybillStatus, (int val) =>
+                {
+                    waypoint.MatchWaybillStatus = (ManagedWaypoint.WaybillStatus)val;
+                    onWaypointChange(waypoint);
+                }));
+            });
+
+            BuildExcludeMatchingCarsFromCutField(waypoint, builder, onWaypointChange);
+
+            BuildCutBlockFromField(waypoint, builder, onWaypointChange);
+
+            builder.HStack(delegate (UIPanelBuilder builder)
+            {
+                AddBleedAirAndSetBrakeToggles(waypoint, builder, onWaypointChange);
+            });
+
+            builder.HStack(row =>
+            {
+                AddLeaveAirBottledToggle(waypoint, row, onWaypointChange);
+
+                if (!waypoint.WillPostCoupleCutPickup && !waypoint.WillPostCoupleCutDropoff)
+                {
+                    BuildMakeUncoupledCarsActiveField(waypoint, row, onWaypointChange);
+                }
+            });
 
             return builder;
         }
@@ -1184,6 +1222,30 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
 
             AddLabelOnlyTooltip(matchingDestinationField, "Matching destination", matchingDestinationTooltip);
 
+            BuildExcludeMatchingCarsFromCutField(waypoint, builder, onWaypointChange);
+
+            BuildCutBlockFromField(waypoint, builder, onWaypointChange);
+
+            builder.HStack(delegate (UIPanelBuilder builder)
+            {
+                AddBleedAirAndSetBrakeToggles(waypoint, builder, onWaypointChange);
+            });
+
+            builder.HStack(row =>
+            {
+                AddLeaveAirBottledToggle(waypoint, row, onWaypointChange);
+
+                if (!waypoint.WillPostCoupleCutPickup && !waypoint.WillPostCoupleCutDropoff)
+                {
+                    BuildMakeUncoupledCarsActiveField(waypoint, row, onWaypointChange);
+                }
+            });
+
+            return builder;
+        }
+
+        private UIPanelBuilder BuildExcludeMatchingCarsFromCutField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
+        {
             var excludeMatchingCarsFromCutField = builder.AddField("Exclude match from cut", builder.AddToggle(() => waypoint.ExcludeMatchingCarsFromCut, (bool value) =>
             {
                 waypoint.ExcludeMatchingCarsFromCut = value;
@@ -1200,6 +1262,11 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
 
             AddLabelOnlyTooltip(excludeMatchingCarsFromCutField, "Exclude matching cars from cut", excludeMatchingCarsFromCutTooltip);
 
+            return builder;
+        }
+
+        private UIPanelBuilder BuildCutBlockFromField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
+        {
             string cutBlockLabel = "Cut block from";
             List<string> cutBlockFromOptions = WithTrainEnds(waypoint, "Closest end to waypoint", "Furthest end from waypoint");
 
@@ -1263,22 +1330,6 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
             }
 
             AddLabelOnlyTooltip(cutBlockFromField, cutBlockLabel, cutBlockFromTooltip);
-
-            builder.HStack(delegate (UIPanelBuilder builder)
-            {
-                AddBleedAirAndSetBrakeToggles(waypoint, builder, onWaypointChange);
-            });
-
-            builder.HStack(row =>
-            {
-                AddLeaveAirBottledToggle(waypoint, row, onWaypointChange);
-
-                if (!waypoint.WillPostCoupleCutPickup && !waypoint.WillPostCoupleCutDropoff)
-                {
-                    BuildMakeUncoupledCarsActiveField(waypoint, row, onWaypointChange);
-                }
-            });
-
             return builder;
         }
 
@@ -1427,6 +1478,11 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
             if (waypoint.WillUncoupleAllExceptLocomotives)
             {
                 BuildUncoupleAllExceptLocomotive(waypoint, builder, onWaypointChange);
+            }
+
+            if (waypoint.WillUncoupleByWaybillStatus)
+            {
+                BuildUncoupleByWaybillStatusField(waypoint, builder, onWaypointChange);
             }
         }
 

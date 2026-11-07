@@ -11,7 +11,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Track;
+using Track.Search;
 using UI.EngineControls;
+using UI.Waypoints;
 using UnityEngine;
 using WaypointQueue.Model;
 using WaypointQueue.Services;
@@ -51,11 +53,20 @@ namespace WaypointQueue
 
         private void Awake()
         {
-            EventBus.Subscribe<MapWillUnloadEvent>(this, OnMapWillUnload);
             _waypointResolver = ModLocator.ServiceProvider.GetService<WaypointResolver>();
             _refuelService = ModLocator.ServiceProvider.GetService<RefuelService>();
             _carService = ModLocator.ServiceProvider.GetService<ICarService>();
             _autoEngineerService = ModLocator.ServiceProvider.GetService<AutoEngineerService>();
+        }
+
+        protected void OnEnable()
+        {
+            EventBus.Subscribe<MapWillUnloadEvent>(this, OnMapWillUnload);
+        }
+
+        protected void OnDisable()
+        {
+            EventBus.Unsubscribe(this);
         }
 
         private void OnMapWillUnload(MapWillUnloadEvent @event)
@@ -183,6 +194,7 @@ namespace WaypointQueue
                 // Send next waypoint
                 if (waypointList.Count > 0)
                 {
+                    ModLocator.Loader.LogDebug("Sending next waypoint from QueueTickUpdate");
                     SendToFirstWaypoint(entry, ordersHelper);
                 }
 
@@ -353,6 +365,7 @@ namespace WaypointQueue
                 }
                 entry.Waypoints[0] = waypoint;
                 ModStateManager.Shared.SaveLocoWaypointState(loco.id, entry);
+                ModLocator.Loader.LogDebug("Sending next waypoint from replacing waypoint");
                 SendToFirstWaypoint(entry, _autoEngineerService.GetOrdersHelper(loco));
                 ModLocator.Loader.LogDebug($"Replaced waypoint for {waypoint.Locomotive.Ident} to {waypoint.Location}");
                 RestartCoroutine();

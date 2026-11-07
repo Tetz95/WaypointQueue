@@ -21,6 +21,7 @@ namespace WaypointQueue
         public WaypointWindow WaypointWindow { get; private set; }
         public RouteManagerWindow RouteManagerWindow { get; private set; }
         public ModSettingsWindow ModSettingsWindow { get; private set; }
+        internal PendingSwitchRestorer PendingSwitchRestorer { get; private set; }
 
         internal ServiceProvider ServiceProvider { get; private set; }
 
@@ -84,6 +85,7 @@ namespace WaypointQueue
                 WaypointWindow = waypointQueueGO.AddComponent<WaypointWindow>();
                 RouteManagerWindow = waypointQueueGO.AddComponent<RouteManagerWindow>();
                 ModSettingsWindow = waypointQueueGO.AddComponent<ModSettingsWindow>();
+                PendingSwitchRestorer = waypointQueueGO.AddComponent<PendingSwitchRestorer>();
 
                 QueueStorageGO = new GameObject(QueueStorageGOName);
                 RouteStorageGO = new GameObject(RouteStorageGOName);
@@ -155,8 +157,6 @@ namespace WaypointQueue
 
             HarmonyInstance.UnpatchAll(ModContext.ModIdentifier);
 
-            PendingSwitchRestorer.Shutdown();
-
             if (Instance != null) UnityEngine.Object.DestroyImmediate(Instance.gameObject);
             Instance = null;
 
@@ -188,7 +188,14 @@ namespace WaypointQueue
 
         public void LogDebug(string str)
         {
-            ModContext.Log.Debug(str);
+            if (ModLocator.Settings.EnableVerboseLogging)
+            {
+                ModContext.Log.Info(str);
+            }
+            else
+            {
+                ModContext.Log.Debug(str);
+            }
         }
 
         public void LogError(string str)

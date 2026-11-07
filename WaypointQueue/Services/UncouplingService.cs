@@ -86,13 +86,13 @@ namespace WaypointQueue
             List<Car> consistFromEnd = GetConsistForCutFromEnd(wp);
 
             // With no matching car, the block search would return every car, cutting the whole train
-            if (!consistFromEnd.Any(GetDestinationPredicate(wp)))
+            if (!consistFromEnd.Any(GetCarPredicate(wp)))
             {
                 ModLocator.Loader.Log($"No cars in {wp.Locomotive.Ident}'s consist match the uncoupling destination {wp.UncoupleDestinationId}");
                 return [];
             }
 
-            var matchFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: false);
+            var matchFunction = GetCarMatchFunction(wp, isPostCoupleCut: false);
             List<Car> carsToCut = matchFunction(consistFromEnd);
             return carsToCut;
         }
@@ -101,14 +101,14 @@ namespace WaypointQueue
         {
             List<Car> carsAvailableForPickup = GetCarsAvailableForPickup(wp, carCoupledTo);
 
-            if (!carsAvailableForPickup.Any(GetDestinationPredicate(wp)))
+            if (!carsAvailableForPickup.Any(GetCarPredicate(wp)))
             {
                 // Pick up nothing: cut off every car that was coupled to
                 ModLocator.Loader.Log($"No cars available for pickup by {wp.Locomotive.Ident} match the destination {wp.UncoupleDestinationId}");
                 return carsAvailableForPickup;
             }
 
-            var pickupCalcFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: true);
+            var pickupCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
 
             if (wp.CountUncoupledFromNearestToWaypoint)
             {
@@ -128,13 +128,13 @@ namespace WaypointQueue
         {
             List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
 
-            if (!carsAvailableForDropoff.Any(GetDestinationPredicate(wp)))
+            if (!carsAvailableForDropoff.Any(GetCarPredicate(wp)))
             {
                 ModLocator.Loader.Log($"No cars available for dropoff by {wp.Locomotive.Ident} match the destination {wp.UncoupleDestinationId}");
                 return [];
             }
 
-            var dropoffCalcFunction = GetDestinationMatchFunction(wp, isPostCoupleCut: true);
+            var dropoffCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
 
             if (wp.CountUncoupledFromNearestToWaypoint)
             {
@@ -159,7 +159,69 @@ namespace WaypointQueue
             }
         }
 
-        private Func<List<Car>, List<Car>> GetDestinationMatchFunction(ManagedWaypoint wp, bool isPostCoupleCut)
+        public List<Car> FindCutByWaybillStatus(ManagedWaypoint wp)
+        {
+            List<Car> consistFromEnd = GetConsistForCutFromEnd(wp);
+            if (!consistFromEnd.Any(GetCarPredicate(wp)))
+            {
+                ModLocator.Loader.Log($"No cars in {wp.Locomotive.Ident}'s consist match waybill status {wp.MatchWaybillStatus}");
+                return [];
+            }
+
+            var matchFunction = GetCarMatchFunction(wp, isPostCoupleCut: false);
+            List<Car> carsToCut = matchFunction(consistFromEnd);
+            return carsToCut;
+        }
+
+        public List<Car> FindPickupByWaybillStatus(ManagedWaypoint wp, Car carCoupledTo)
+        {
+            List<Car> carsAvailableForPickup = GetCarsAvailableForPickup(wp, carCoupledTo);
+
+            var pickupCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
+
+            if (wp.CountUncoupledFromNearestToWaypoint)
+            {
+                carsAvailableForPickup.Reverse();
+                List<Car> carsToPickup = pickupCalcFunction(carsAvailableForPickup);
+                List<Car> carsNotPickedUp = [.. carsAvailableForPickup.Where(c => !carsToPickup.Any(p => p.id == c.id))];
+                return carsNotPickedUp;
+            }
+            else
+            {
+                List<Car> carsToCut = pickupCalcFunction(carsAvailableForPickup);
+                return carsToCut;
+            }
+        }
+
+        public List<Car> FindDropoffByWaybillStatus(ManagedWaypoint wp, Car carCoupledTo)
+        {
+            List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
+            var dropoffCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
+
+            if (wp.CountUncoupledFromNearestToWaypoint)
+            {
+                List<Car> carsToDropoff = dropoffCalcFunction(carsAvailableForDropoff);
+                List<Car> carsToCut = [];
+                if (carsToDropoff.Count > 0)
+                {
+                    // need to add cars before the last car
+                    Car lastCar = carsToDropoff.Last();
+                    int indexOfLastCarToDropoff = consistFromFarEnd.FindIndex(c => c.id == lastCar.id);
+                    carsToCut = consistFromFarEnd.GetRange(0, indexOfLastCarToDropoff + 1);
+                }
+                return carsToCut;
+            }
+            else
+            {
+                carsAvailableForDropoff.Reverse();
+                // if we're dropping off furthest block, we invert the exclude because we're matching from the other end
+                List<Car> carsToKeep = dropoffCalcFunction(carsAvailableForDropoff);
+                List<Car> carsToCut = [.. consistFromFarEnd.Where(c => carsToKeep.All(x => x.id != c.id))];
+                return carsToCut;
+            }
+        }
+
+        private Func<List<Car>, List<Car>> GetCarMatchFunction(ManagedWaypoint wp, bool isPostCoupleCut)
         {
             bool excludeMatchFromCut = wp.ExcludeMatchingCarsFromCut;
 
@@ -169,11 +231,11 @@ namespace WaypointQueue
                 excludeMatchFromCut = !wp.ExcludeMatchingCarsFromCut;
             }
 
-            Func<Car, bool> matchFunction = GetDestinationPredicate(wp);
+            Func<Car, bool> matchFunction = GetCarPredicate(wp);
             return (cars) => FindMatchingCarBlock(cars, matchFunction, excludeMatchFromCut);
         }
 
-        private Func<Car, bool> GetDestinationPredicate(ManagedWaypoint wp)
+        private Func<Car, bool> GetCarPredicate(ManagedWaypoint wp)
         {
             if (wp.WillUncoupleByNoDestination)
             {
@@ -208,7 +270,22 @@ namespace WaypointQueue
                     return carArea?.identifier == areaMatch.identifier;
                 };
             }
-            throw new UncouplingException("Failed to find a valid destination match function.", wp);
+            if (wp.WillUncoupleByWaybillStatus)
+            {
+                return (car) =>
+                {
+                    switch (wp.MatchWaybillStatus)
+                    {
+                        case ManagedWaypoint.WaybillStatus.None:
+                            return !car.Waybill.HasValue;
+                        case ManagedWaypoint.WaybillStatus.Complete:
+                            return car.Waybill.HasValue && car.Waybill.Value.Completed;
+                        default:
+                            return car.Waybill.HasValue && !car.Waybill.Value.Completed;
+                    }
+                };
+            }
+            throw new UncouplingException("Failed to find a valid car match function.", wp);
         }
 
         private OpsCarPosition TryGetDestinationTrackMatch(ManagedWaypoint wp)

@@ -94,7 +94,15 @@ namespace WaypointQueue
             ByDestinationIndustry,
             ByDestinationTrack,
             BySpecificCar,
-            AllExceptLocomotives
+            AllExceptLocomotives,
+            ByWaybillStatus
+        }
+
+        public enum WaybillStatus
+        {
+            Complete,
+            Incomplete,
+            None
         }
 
         [JsonProperty]
@@ -312,6 +320,7 @@ namespace WaypointQueue
         public virtual bool WillUncoupleByDestinationArea { get { return UncouplingMode == UncoupleMode.ByDestinationArea; } }
         [JsonIgnore]
         public bool WillUncoupleBySpecificCar { get { return UncouplingMode == UncoupleMode.BySpecificCar; } }
+        public bool WillUncoupleByWaybillStatus { get { return UncouplingMode == UncoupleMode.ByWaybillStatus; } }
         [JsonIgnore]
         public bool WillUncoupleAllExceptLocomotives { get { return UncouplingMode == UncoupleMode.AllExceptLocomotives; } }
 
@@ -395,6 +404,7 @@ namespace WaypointQueue
         public string DestinationSearchText { get; set; } = "";
         public virtual string UncoupleDestinationId { get; set; } = "";
         public virtual bool ExcludeMatchingCarsFromCut { get; set; }
+        public WaybillStatus MatchWaybillStatus { get; set; } = WaybillStatus.Complete;
 
         public bool MoveTrainPastWaypoint { get; set; }
         public bool CurrentlyWaitingBeforeCutting { get; set; }
@@ -724,6 +734,8 @@ namespace WaypointQueue
                    MaxSpeedAfterRefueling == other.MaxSpeedAfterRefueling &&
                    RefuelLoaderAnimated == other.RefuelLoaderAnimated &&
                    RefuelLocoIdsQueue.SequenceEqual(other.RefuelLocoIdsQueue) &&
+                   RefuelLoaderRegisteredId == other.RefuelLoaderRegisteredId &&
+                   EnableMultipleRefueling == other.EnableMultipleRefueling &&
                    TimetableSymbol == other.TimetableSymbol &&
                    WillWait == other.WillWait &&
                    CurrentlyWaiting == other.CurrentlyWaiting &&
@@ -748,6 +760,7 @@ namespace WaypointQueue
                    DestinationSearchText == other.DestinationSearchText &&
                    UncoupleDestinationId == other.UncoupleDestinationId &&
                    ExcludeMatchingCarsFromCut == other.ExcludeMatchingCarsFromCut &&
+                   MatchWaybillStatus == other.MatchWaybillStatus &&
                    MoveTrainPastWaypoint == other.MoveTrainPastWaypoint &&
                    (Pose?.SameAs(other.Pose) ?? other.Pose == null || other.Pose.IsEmpty) &&
                    CurrentlyWaitingBeforeCutting == other.CurrentlyWaitingBeforeCutting &&
@@ -820,6 +833,7 @@ namespace WaypointQueue
                 [ValueKeys.UncouplingSearchResultCarId] = Value.String(UncouplingSearchResultCarId),
                 [ValueKeys.DestinationSearchText] = Value.String(DestinationSearchText),
                 [ValueKeys.UncoupleDestinationId] = Value.String(UncoupleDestinationId),
+                [ValueKeys.MatchWaybillStatus] = Value.Int((int)MatchWaybillStatus),
                 [ValueKeys.ExcludeMatchingCarsFromCut] = Value.Bool(ExcludeMatchingCarsFromCut),
                 [ValueKeys.MoveTrainPastWaypoint] = Value.Bool(MoveTrainPastWaypoint),
                 [ValueKeys.CurrentlyWaitingBeforeCutting] = Value.Bool(CurrentlyWaitingBeforeCutting),
@@ -901,9 +915,9 @@ namespace WaypointQueue
             waypoint.UncouplingSearchResultCarId = dict[ValueKeys.UncouplingSearchResultCarId].StringValue;
             waypoint.DestinationSearchText = dict[ValueKeys.DestinationSearchText].StringValue;
             waypoint.UncoupleDestinationId = dict[ValueKeys.UncoupleDestinationId].StringValue;
-            waypoint.ExcludeMatchingCarsFromCut = dict[ValueKeys.ExcludeMatchingCarsFromCut].BoolValue; ;
+            waypoint.ExcludeMatchingCarsFromCut = dict[ValueKeys.ExcludeMatchingCarsFromCut].BoolValue;
             waypoint.MoveTrainPastWaypoint = dict[ValueKeys.MoveTrainPastWaypoint].BoolValue;
-            waypoint.CurrentlyWaitingBeforeCutting = dict[ValueKeys.CurrentlyWaitingBeforeCutting].BoolValue; ;
+            waypoint.CurrentlyWaitingBeforeCutting = dict[ValueKeys.CurrentlyWaitingBeforeCutting].BoolValue;
             waypoint.StatusLabel = dict[ValueKeys.StatusLabel].StringValue;
             waypoint.Errors = [.. dict[ValueKeys.Errors].ArrayValue.ToList().Select(e => WaypointError.FromPropertyValue(e))];
             waypoint.Pose = dict.TryGetValue(ValueKeys.Pose, out Value pose) ? QueuedPose.FromPropertyValue(pose) : null;
@@ -939,6 +953,11 @@ namespace WaypointQueue
             if (dict.ContainsKey(ValueKeys.RepositioningToRetryRefuel))
             {
                 waypoint.RepositioningToRetryRefuel = dict[ValueKeys.RepositioningToRetryRefuel].BoolValue;
+            }
+
+            if (dict.ContainsKey(ValueKeys.MatchWaybillStatus))
+            {
+                waypoint.MatchWaybillStatus = (WaybillStatus)dict[ValueKeys.MatchWaybillStatus].IntValue;
             }
 
             return waypoint;
@@ -1001,6 +1020,7 @@ namespace WaypointQueue
             internal static string DestinationSearchText = "destination_search_text";
             internal static string UncoupleDestinationId = "uncouple_destination_id";
             internal static string ExcludeMatchingCarsFromCut = "exclude_matching_cars_from_cut";
+            internal static string MatchWaybillStatus = "match_waybill_status";
             internal static string MoveTrainPastWaypoint = "move_train_past_waypoint";
             internal static string CurrentlyWaitingBeforeCutting = "currently_waiting_before_cutting";
             internal static string StatusLabel = "status_label";
