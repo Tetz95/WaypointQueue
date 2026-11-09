@@ -555,7 +555,8 @@ namespace WaypointQueue.Tests
             car.id = roadNumber.ToString();
 
             var destination = new OpsCarPosition();
-            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination)).Returns(false);
+            var isAtDestination = false;
+            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination, out isAtDestination)).Returns(false);
 
             _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(car)).Returns(isLoco);
 
@@ -569,7 +570,8 @@ namespace WaypointQueue.Tests
             car.id = roadNumber.ToString();
 
             var destination = new OpsCarPosition(displayName: area.identifier, identifier: area.identifier, []);
-            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination)).Returns(true);
+            var isAtDestination = false;
+            _opsControllerWrapperMock.Setup(w => w.TryGetCarDesination(car, out destination, out isAtDestination)).Returns(true);
             _opsControllerWrapperMock.Setup(w => w.AreaForCarPosition(destination)).Returns(area);
 
             _carServiceMock.Setup(cs => cs.IsCarLocomotiveType(car)).Returns(isLoco);

@@ -110,7 +110,7 @@ namespace WaypointQueue.UI
             _dontSnapToCars = [];
             if (!forRoute)
             {
-                _dontSnapToCars = [.. waypoint.Locomotive.EnumerateCoupled()];
+                _dontSnapToCars = [.. CoupledCars(waypoint.Locomotive)];
             }
 
             if (_coroutine != null)
@@ -159,7 +159,7 @@ namespace WaypointQueue.UI
             if (!forRoute)
             {
                 _locomotive = beforeWaypoint.Locomotive;
-                _dontSnapToCars = [.. beforeWaypoint.Locomotive.EnumerateCoupled()];
+                _dontSnapToCars = [.. CoupledCars(beforeWaypoint.Locomotive)];
             }
 
             if (_coroutine != null)
@@ -231,6 +231,10 @@ namespace WaypointQueue.UI
                 try
                 {
                     onSelected(location, coupleToCarId);
+                }
+                catch (Exception e)
+                {
+                    ModLocator.Loader.LogError($"OnWaypointSelected failed with exception: {e}");
                 }
                 finally
                 {
@@ -359,8 +363,24 @@ namespace WaypointQueue.UI
 
             _waypointMarker.gameObject.SetActive(value: false);
             ModLocator.Loader.LogDebug($"WaypointPicker Hit: {valueOrDefault.Location} {valueOrDefault.CarInfo?.car} {valueOrDefault.CarInfo?.end}");
-            _onWaypointSelected(location, valueOrDefault.CarInfo?.car?.id ?? "");
-            Cancel();
+            try
+            {
+                _onWaypointSelected(location, valueOrDefault.CarInfo?.car?.id ?? "");
+            }
+            catch (Exception e)
+            {
+                ModLocator.Loader.LogError($"OnWaypointSelected failed with exception: {e}");
+            }
+            finally
+            {
+                Cancel();
+            }
+        }
+
+        // A car not yet in a set (just spawned or being removed) has nothing coupled; EnumerateCoupled would throw.
+        private static IEnumerable<Car> CoupledCars(Car car)
+        {
+            return car?.set != null ? car.EnumerateCoupled() : [];
         }
 
         private Hit? HitLocation()

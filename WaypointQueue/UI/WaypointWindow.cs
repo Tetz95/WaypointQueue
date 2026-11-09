@@ -78,6 +78,11 @@ namespace WaypointQueue.UI
                 Show();
             }
 
+            CaptureCustomWindow();
+        }
+
+        private void CaptureCustomWindow()
+        {
             if (_customWindow == null)
             {
                 _customWindow = WindowManager.Shared.GetCustomWindow(WindowIdentifier);
@@ -223,6 +228,8 @@ namespace WaypointQueue.UI
         {
             ModLocator.Loader.LogDebug($"Rebuilding and showing waypoint panel");
             WindowManager.Shared.ShowWindow(WindowIdentifier);
+            CaptureCustomWindow();
+            _customWindow.Rebuild();
         }
 
         public void Hide()
@@ -472,9 +479,9 @@ namespace WaypointQueue.UI
                     BuildUncoupleAllExceptLocomotive(waypoint, builder, onWaypointChange);
                 }
 
-                if (!waypoint.HasAnyCouplingOrders && waypoint.WillUncoupleByWaybillStatus)
+                if (!waypoint.HasAnyCouplingOrders && waypoint.WillUncoupleByOpsPositionStatus)
                 {
-                    BuildUncoupleByWaybillStatusField(waypoint, builder, onWaypointChange);
+                    BuildUncoupleByOpsPositionStatusField(waypoint, builder, onWaypointChange);
                 }
 
                 if ((waypoint.HasAnyPostCouplingCutOrders || (!waypoint.IsCoupling && !waypoint.HasAnyUncouplingOrders)) && waypoint.CouplingSearchMode != ManagedWaypoint.CoupleSearchMode.None && !waypoint.CurrentlyWaiting)
@@ -642,6 +649,19 @@ namespace WaypointQueue.UI
                     onWaypointReorder(waypoint, index + 2);
                 }
             }).Width(30f).Height(30f).Disable(index == totalWaypoints - 1);
+
+            builder.AddIconButton("Locate", () =>
+            {
+                if (ModLocator.Loader.WaypointPreviewer.IsDisplayingPreview(waypoint))
+                {
+                    ModLocator.Loader.WaypointPreviewer.EndPreview();
+                }
+                else
+                {
+                    JumpCameraToWaypoint(waypoint);
+                    ModLocator.Loader.WaypointPreviewer.ShowWaypointPreview(waypoint);
+                }
+            }).Width(30f).Height(30f);
 
             List<DropdownMenu.RowData> options = new List<DropdownMenu.RowData>();
             var jumpToWaypointRow = new DropdownMenu.RowData("Jump to waypoint", "");
@@ -1063,7 +1083,7 @@ return builder;
                 (ManagedWaypoint.UncoupleMode.ByDestinationIndustry, "By industry destination" ),
                 (ManagedWaypoint.UncoupleMode.ByDestinationTrack, "By track destination" ),
                 (ManagedWaypoint.UncoupleMode.BySpecificCar, "By specific car" ),
-                (ManagedWaypoint.UncoupleMode.ByWaybillStatus, "By waybill status" ),
+                (ManagedWaypoint.UncoupleMode.ByOpsPositionStatus, "By waybill status" ),
                 (ManagedWaypoint.UncoupleMode.AllExceptLocomotives, "All except locomotives" )
             };
 
@@ -1124,13 +1144,13 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
             return builder;
         }
 
-        private UIPanelBuilder BuildUncoupleByWaybillStatusField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
+        private UIPanelBuilder BuildUncoupleByOpsPositionStatusField(ManagedWaypoint waypoint, UIPanelBuilder builder, Action<ManagedWaypoint> onWaypointChange)
         {
             builder.HStack(delegate (UIPanelBuilder builder)
             {
-                builder.AddField("Waybill status", builder.AddDropdown(["Completed waybills", "Incompleted waybills", "No waybills"], (int)waypoint.MatchWaybillStatus, (int val) =>
+                builder.AddField("Waybill status", builder.AddDropdown(["Spotted cars", "Unspotted cars", "No destination"], (int)waypoint.MatchOpsPositionStatus, (int val) =>
                 {
-                    waypoint.MatchWaybillStatus = (ManagedWaypoint.WaybillStatus)val;
+                    waypoint.MatchOpsPositionStatus = (ManagedWaypoint.OpsPositionStatus)val;
                     onWaypointChange(waypoint);
                 }));
             });
@@ -1480,9 +1500,9 @@ AddLabelOnlyTooltip(uncouplingModeField, "Uncoupling mode", uncouplingModeToolti
                 BuildUncoupleAllExceptLocomotive(waypoint, builder, onWaypointChange);
             }
 
-            if (waypoint.WillUncoupleByWaybillStatus)
+            if (waypoint.WillUncoupleByOpsPositionStatus)
             {
-                BuildUncoupleByWaybillStatusField(waypoint, builder, onWaypointChange);
+                BuildUncoupleByOpsPositionStatusField(waypoint, builder, onWaypointChange);
             }
         }
 
@@ -1747,7 +1767,12 @@ if (waypoint.WillRefuel)
             {
                 builder.AddField("Waiting until", builder.HStack((UIPanelBuilder field) =>
                 {
-                    field.AddLabel($"{new GameDateTime(waypoint.WaitUntilGameTotalSeconds)}");
+                    var label = $"{new GameDateTime(waypoint.WaitUntilGameTotalSeconds)}";
+                    if (waypoint.WaitMode == ManagedWaypoint.WaitType.CarsNotSpotted)
+                    {
+                        label = "cars are not spotted";
+                    }
+                    field.AddLabel($"{label}");
                     field.Spacer();
                     field.AddButtonCompact("Skip wait", delegate
                     {
@@ -1769,7 +1794,9 @@ if (waypoint.WillRefuel)
             }
             builder.AddField("Then wait", builder.HStack((UIPanelBuilder builder) =>
             {
-                builder.AddDropdown(["Remove wait", "For a duration of time", "Until a specific time"], waypoint.DurationOrSpecificTime == ManagedWaypoint.WaitType.Duration ? 1 : 2, (int value) =>
+                int selectedIndex = (int)waypoint.WaitMode + 1;
+                // +1 to account for remove wait being at index zero
+                builder.AddDropdown(["Remove wait", "For a duration of time", "Until a specific time", "Until cars are not spotted"], selectedIndex, (int value) =>
                 {
                     switch (value)
                     {
@@ -1777,19 +1804,21 @@ if (waypoint.WillRefuel)
                             waypoint.WillWait = false;
                             break;
                         case 1:
-                            waypoint.DurationOrSpecificTime = ManagedWaypoint.WaitType.Duration; break;
+                            waypoint.WaitMode = ManagedWaypoint.WaitType.Duration; break;
                         case 2:
-                            waypoint.DurationOrSpecificTime = ManagedWaypoint.WaitType.SpecificTime; break;
+                            waypoint.WaitMode = ManagedWaypoint.WaitType.SpecificTime; break;
+                        case 3:
+                            waypoint.WaitMode = ManagedWaypoint.WaitType.CarsNotSpotted; break;
                         default:
                             break;
                     }
                     onWaypointChange(waypoint);
-                }).Width(200f);
+                }).Width(250f);
             }));
 
             builder.Spacer(8f);
 
-            if (waypoint.DurationOrSpecificTime == ManagedWaypoint.WaitType.Duration)
+            if (waypoint.WaitMode == ManagedWaypoint.WaitType.Duration)
             {
                 var waitForDurationField = builder.AddField("Wait for", builder.HStack((UIPanelBuilder builder) =>
                 {
@@ -1849,7 +1878,7 @@ if (waypoint.WillRefuel)
                 AddLabelOnlyTooltip(waitForDurationField, "Wait for duration", "Upon arriving at this waypoint, the engineer will begin waiting for this amount of time before proceeding to the next waypoint.");
             }
 
-            if (waypoint.DurationOrSpecificTime == ManagedWaypoint.WaitType.SpecificTime)
+            if (waypoint.WaitMode == ManagedWaypoint.WaitType.SpecificTime)
             {
                 var waitUntilTimeField = builder.AddField("Wait until", builder.HStack((UIPanelBuilder field) =>
                 {

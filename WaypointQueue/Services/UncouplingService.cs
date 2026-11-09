@@ -164,7 +164,7 @@ namespace WaypointQueue
             List<Car> consistFromEnd = GetConsistForCutFromEnd(wp);
             if (!consistFromEnd.Any(GetCarPredicate(wp)))
             {
-                ModLocator.Loader.Log($"No cars in {wp.Locomotive.Ident}'s consist match waybill status {wp.MatchWaybillStatus}");
+                ModLocator.Loader.Log($"No cars in {wp.Locomotive.Ident}'s consist match waybill status {wp.MatchOpsPositionStatus}");
                 return [];
             }
 
@@ -176,6 +176,13 @@ namespace WaypointQueue
         public List<Car> FindPickupByWaybillStatus(ManagedWaypoint wp, Car carCoupledTo)
         {
             List<Car> carsAvailableForPickup = GetCarsAvailableForPickup(wp, carCoupledTo);
+
+            if (!carsAvailableForPickup.Any(GetCarPredicate(wp)))
+            {
+                // Pick up nothing: cut off every car that was coupled to
+                ModLocator.Loader.Log($"No cars available for pickup by {wp.Locomotive.Ident} match waybill status {wp.MatchOpsPositionStatus}");
+                return carsAvailableForPickup;
+            }
 
             var pickupCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
 
@@ -196,6 +203,13 @@ namespace WaypointQueue
         public List<Car> FindDropoffByWaybillStatus(ManagedWaypoint wp, Car carCoupledTo)
         {
             List<Car> carsAvailableForDropoff = GetCarsAvailableForDropoff(wp, carCoupledTo, out List<Car> consistFromFarEnd);
+
+            if (!carsAvailableForDropoff.Any(GetCarPredicate(wp)))
+            {
+                ModLocator.Loader.Log($"No cars available for dropoff by {wp.Locomotive.Ident} match waybill status {wp.MatchOpsPositionStatus}");
+                return [];
+            }
+
             var dropoffCalcFunction = GetCarMatchFunction(wp, isPostCoupleCut: true);
 
             if (wp.CountUncoupledFromNearestToWaypoint)
@@ -239,14 +253,14 @@ namespace WaypointQueue
         {
             if (wp.WillUncoupleByNoDestination)
             {
-                return (car) => !opsControllerWrapper.TryGetCarDesination(car, out _);
+                return (car) => !opsControllerWrapper.TryGetCarDesination(car, out _, out _);
             }
             if (wp.WillUncoupleByDestinationTrack)
             {
                 OpsCarPosition destinationMatch = TryGetDestinationTrackMatch(wp);
                 return (car) =>
                 {
-                    bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination);
+                    bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination, out _);
                     return hasDestination && carDestination.DisplayName == destinationMatch.DisplayName;
                 };
             }
@@ -255,7 +269,7 @@ namespace WaypointQueue
                 Industry industryMatch = TryGetDestinationIndustryMatch(wp);
                 return (car) =>
                 {
-                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination)) return false;
+                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination, out _)) return false;
                     IndustryComponent industryComponent = opsControllerWrapper.IndustryComponentForPosition(carDestination);
                     return industryComponent?.Industry?.identifier == industryMatch.identifier;
                 };
@@ -265,23 +279,25 @@ namespace WaypointQueue
                 Area areaMatch = TryGetDestinationAreaMatch(wp);
                 return (car) =>
                 {
-                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination)) return false;
+                    if (!opsControllerWrapper.TryGetCarDesination(car, out OpsCarPosition carDestination, out _)) return false;
                     Area carArea = opsControllerWrapper.AreaForCarPosition(carDestination);
                     return carArea?.identifier == areaMatch.identifier;
                 };
             }
-            if (wp.WillUncoupleByWaybillStatus)
+            if (wp.WillUncoupleByOpsPositionStatus)
             {
+                ManagedWaypoint.OpsPositionStatus status = wp.MatchOpsPositionStatus;
                 return (car) =>
                 {
-                    switch (wp.MatchWaybillStatus)
+                    bool hasDestination = opsControllerWrapper.TryGetCarDesination(car, out _, out bool isAtDestination);
+                    switch (status)
                     {
-                        case ManagedWaypoint.WaybillStatus.None:
-                            return !car.Waybill.HasValue;
-                        case ManagedWaypoint.WaybillStatus.Complete:
-                            return car.Waybill.HasValue && car.Waybill.Value.Completed;
+                        case ManagedWaypoint.OpsPositionStatus.None:
+                            return !hasDestination;
+                        case ManagedWaypoint.OpsPositionStatus.Spotted:
+                            return hasDestination && isAtDestination;
                         default:
-                            return car.Waybill.HasValue && !car.Waybill.Value.Completed;
+                            return hasDestination && !isAtDestination;
                     }
                 };
             }
@@ -391,7 +407,7 @@ namespace WaypointQueue
             }
 
             LogicalEnd closestEnd = carService.ClosestLogicalEndTo(carToUncouple, waypoint.Location);
-            List<Car> consist = [.. waypoint.Locomotive.EnumerateCoupled(closestEnd)];
+            List<Car> consist = [.. carService.EnumerateCoupled(waypoint.Locomotive, closestEnd)];
             if (!consist.Any(c => c.id == carToUncouple.id))
             {
                 throw new UncouplingException($"{carToUncouple.Ident} cannot be uncoupled because it is not part of {waypoint.Locomotive.Ident}'s consist.", waypoint);
@@ -455,7 +471,7 @@ namespace WaypointQueue
         public void UncoupleAllExceptLocomotives(ManagedWaypoint waypoint)
         {
             ModLocator.Loader.Log($"Resolving uncoupling all except locomotives for {waypoint.Locomotive.Ident}");
-            List<Car> consist = [.. waypoint.Locomotive.EnumerateCoupled(LogicalEnd.A)];
+            List<Car> consist = [.. carService.EnumerateCoupled(waypoint.Locomotive, LogicalEnd.A)];
 
             // Only the locomotives working the train stay; ones being hauled dead are cut with the cars
             HashSet<string> workingLocoIds = carService.GetWorkingLocomotiveIds(waypoint.Locomotive);
@@ -647,7 +663,7 @@ namespace WaypointQueue
                 throw new UncouplingException(errorMessage, waypoint);
             }
 
-            List<Car> fullConsistFromEndA = [.. carsToCut.First().EnumerateCoupled(fromEnd: LogicalEnd.A)];
+            List<Car> fullConsistFromEndA = [.. carService.EnumerateCoupled(carsToCut.First(), fromEnd: LogicalEnd.A)];
 
             if (carsToCut.Count > fullConsistFromEndA.Count)
             {

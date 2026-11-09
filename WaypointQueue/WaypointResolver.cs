@@ -17,10 +17,11 @@ using UnityEngine;
 using WaypointQueue.Model;
 using WaypointQueue.Services;
 using WaypointQueue.UI;
+using WaypointQueue.Wrappers;
 
 namespace WaypointQueue
 {
-    internal class WaypointResolver(UncouplingService uncouplingService, RefuelService refuelService, CouplingService couplingService, ICarService carService, AutoEngineerService autoEngineerService)
+    internal class WaypointResolver(UncouplingService uncouplingService, RefuelService refuelService, CouplingService couplingService, ICarService carService, AutoEngineerService autoEngineerService, IOpsControllerWrapper opsControllerWrapper)
     {
         public static readonly string NoDestinationString = "No destination";
         public static readonly string RemoveTrainSymbolString = "remove-train-symbol";
@@ -508,7 +509,7 @@ namespace WaypointQueue
 
         internal bool IsTrainStopped(ManagedWaypoint wp)
         {
-            List<Car> coupled = [.. wp.Locomotive.EnumerateCoupled()];
+            List<Car> coupled = [.. carService.EnumerateCoupled(wp.Locomotive)];
             Car firstCar = coupled.First();
             Car lastCar = coupled.Last();
             //ModLocator.Loader.LogDebug($"First car {firstCar.Ident} is {(firstCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")} and last car {lastCar.Ident} is {(lastCar.IsStopped(2) ? "stopped for 2" : "NOT stopped")}");
@@ -518,6 +519,22 @@ namespace WaypointQueue
 
         private bool TryEndWaiting(ManagedWaypoint wp)
         {
+            if (wp.WaitMode == ManagedWaypoint.WaitType.CarsNotSpotted)
+            {
+                var consist = carService.EnumerateCoupled(wp.Locomotive);
+                if (!IsAnyCarSpotted(consist))
+                {
+                    ModLocator.Loader.Log($"Loco {wp.Locomotive.Ident} done waiting");
+                    wp.ClearWaiting();
+                    WaypointQueueController.Shared.UpdateWaypoint(wp);
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
             if (TimeWeather.Now.TotalSeconds >= wp.WaitUntilGameTotalSeconds)
             {
                 ModLocator.Loader.Log($"Loco {wp.Locomotive.Ident} done waiting");
@@ -529,14 +546,27 @@ namespace WaypointQueue
             return false;
         }
 
+        private bool IsAnyCarSpotted(IEnumerable<Car> consist)
+        {
+            foreach (var car in consist)
+            {
+                var hasDestination = opsControllerWrapper.TryGetCarDesination(car, out _, out bool isAtDestination);
+                if (hasDestination && isAtDestination)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private bool TryBeginWaiting(ManagedWaypoint wp)
         {
-            return wp.WillWait && (TryBeginWaitingDuration(wp) || TryBeginWaitingUntilTime(wp));
+            return wp.WillWait && (TryBeginWaitingDuration(wp) || TryBeginWaitingUntilTime(wp) || TryBeginWaitingUntilCarsNotSpotted(wp));
         }
 
         private bool TryBeginWaitingDuration(ManagedWaypoint wp)
         {
-            if (wp.DurationOrSpecificTime == ManagedWaypoint.WaitType.Duration && wp.WaitForDurationMinutes > 0)
+            if (wp.WaitMode == ManagedWaypoint.WaitType.Duration && wp.WaitForDurationMinutes > 0)
             {
                 GameDateTime waitUntilTime = TimeWeather.Now.AddingMinutes(wp.WaitForDurationMinutes);
                 wp.StatusLabel = "Waiting before continuing";
@@ -551,7 +581,7 @@ namespace WaypointQueue
 
         private bool TryBeginWaitingUntilTime(ManagedWaypoint wp)
         {
-            if (wp.DurationOrSpecificTime == ManagedWaypoint.WaitType.SpecificTime)
+            if (wp.WaitMode == ManagedWaypoint.WaitType.SpecificTime)
             {
                 if (TimetableReader.TryParseTime(wp.WaitUntilTimeString, out TimetableTime time))
                 {
@@ -571,6 +601,20 @@ namespace WaypointQueue
             }
             return false;
         }
+
+        private bool TryBeginWaitingUntilCarsNotSpotted(ManagedWaypoint wp)
+        {
+            if (wp.WaitMode == ManagedWaypoint.WaitType.CarsNotSpotted)
+            {
+                wp.StatusLabel = $"Waiting until cars are not spotted";
+                wp.CurrentlyWaiting = true;
+                ModLocator.Loader.Log($"Loco {wp.Locomotive.Ident} waiting until cars are not spotted");
+                WaypointQueueController.Shared.UpdateWaypoint(wp);
+                return true;
+            }
+            return false;
+        }
+
 
         // Send past waypoint without stopping: once the train is this close, it is sent on to the point that clears the
         // waypoint. Ordered only on arrival, the game's own stop at the waypoint and a stop within one train length
@@ -779,15 +823,14 @@ namespace WaypointQueue
 
         private float GetTrainLength(BaseLocomotive locomotive)
         {
-            // 2026.1: a public static over the given cars.
-            return AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
+            return AutoEngineerPlanner.CalculateTotalLength(carService.EnumerateCoupled(locomotive));
         }
 
         private void ResolveBrakeSystemOnCouple(ManagedWaypoint waypoint)
         {
             if (!waypoint.IsCoupling) return;
             ModLocator.Loader.LogDebug($"Resolving coupling orders for loco {waypoint.Locomotive.Ident}");
-            foreach (Car car in waypoint.Locomotive.EnumerateCoupled())
+            foreach (Car car in carService.EnumerateCoupled(waypoint.Locomotive))
             {
                 if (waypoint.ConnectAirOnCouple)
                 {
@@ -860,7 +903,7 @@ namespace WaypointQueue
                 }
             }
 
-            if (waypoint.WillUncoupleByWaybillStatus)
+            if (waypoint.WillUncoupleByOpsPositionStatus)
             {
                 carsToCut = isPickup
                     ? uncouplingService.FindPickupByWaybillStatus(waypoint, carCoupledTo)
@@ -868,7 +911,7 @@ namespace WaypointQueue
 
                 if (!isPickup && carsToCut.Count == 0)
                 {
-                    string message = $"{waypoint.Locomotive.Ident} has no cars to drop off with waybill status {waypoint.MatchWaybillStatus}, so it will remain coupled to all cars.";
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to drop off with waybill status {waypoint.MatchOpsPositionStatus}, so it will remain coupled to all cars.";
                     Console.Log(message);
                     ModLocator.Loader.Log(message);
                     return;
@@ -925,13 +968,13 @@ namespace WaypointQueue
                 return;
             }
 
-            if (waypoint.WillUncoupleByWaybillStatus)
+            if (waypoint.WillUncoupleByOpsPositionStatus)
             {
                 carsToCut = uncouplingService.FindCutByWaybillStatus(waypoint);
 
                 if (carsToCut.Count == 0)
                 {
-                    string message = $"{waypoint.Locomotive.Ident} has no cars to cut with waybill status {waypoint.MatchWaybillStatus}, so no cars were uncoupled.";
+                    string message = $"{waypoint.Locomotive.Ident} has no cars to cut with waybill status {waypoint.MatchOpsPositionStatus}, so no cars were uncoupled.";
                     Console.Log(message);
                     ModLocator.Loader.Log(message);
                     return;

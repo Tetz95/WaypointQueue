@@ -1,7 +1,9 @@
 ﻿using Game.Events;
 using HarmonyLib;
+using Newtonsoft.Json.Linq;
 using Railroader.Modding;
 using System;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 using WaypointQueue.Services;
@@ -22,6 +24,7 @@ namespace WaypointQueue
         public RouteManagerWindow RouteManagerWindow { get; private set; }
         public ModSettingsWindow ModSettingsWindow { get; private set; }
         internal PendingSwitchRestorer PendingSwitchRestorer { get; private set; }
+        internal WaypointPreviewer WaypointPreviewer { get; private set; }
 
         internal ServiceProvider ServiceProvider { get; private set; }
 
@@ -59,6 +62,8 @@ namespace WaypointQueue
             ModContext = modContext;
             ModLocator.Loader = this;
 
+            LogVersionFromInfoJson();
+
             ModLocator.Settings = WaypointQueueSettings.Load();
             ModLocator.Settings.Save();
 
@@ -86,6 +91,7 @@ namespace WaypointQueue
                 RouteManagerWindow = waypointQueueGO.AddComponent<RouteManagerWindow>();
                 ModSettingsWindow = waypointQueueGO.AddComponent<ModSettingsWindow>();
                 PendingSwitchRestorer = waypointQueueGO.AddComponent<PendingSwitchRestorer>();
+                WaypointPreviewer = waypointQueueGO.AddComponent<WaypointPreviewer>();
 
                 QueueStorageGO = new GameObject(QueueStorageGOName);
                 RouteStorageGO = new GameObject(RouteStorageGOName);
@@ -144,7 +150,8 @@ namespace WaypointQueue
                 ServiceProvider.GetService<RefuelService>(),
                 ServiceProvider.GetService<CouplingService>(),
                 ServiceProvider.GetService<ICarService>(),
-                ServiceProvider.GetService<AutoEngineerService>()
+                ServiceProvider.GetService<AutoEngineerService>(),
+                ServiceProvider.GetService<IOpsControllerWrapper>()
                 ));
         }
 
@@ -206,6 +213,29 @@ namespace WaypointQueue
         public void LogError(Exception ex, string str)
         {
             ModContext.Log.Error(ex, str);
+        }
+
+        private void LogVersionFromInfoJson()
+        {
+            string jsonPath = Path.Combine(ModContext.ModDirectory, "Info.json");
+
+            if (!File.Exists(jsonPath))
+            {
+                LogError("Info.json not found");
+                return;
+            }
+
+            string json = File.ReadAllText(jsonPath);
+            var jObj = JObject.Parse(json);
+
+            if (jObj.TryGetValue("version", out var version))
+            {
+                Log($"Loaded Waypoint Queue version {version}");
+            }
+            else
+            {
+                LogError("Version not found in Info.json");
+            }
         }
     }
 }

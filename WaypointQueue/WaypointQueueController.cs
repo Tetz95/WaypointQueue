@@ -332,7 +332,7 @@ namespace WaypointQueue
         {
             if (wp.IsCoupling && wp.TryResolveCoupleToCar(out Car car))
             {
-                List<Car> consist = [.. wp.Locomotive.EnumerateCoupled()];
+                List<Car> consist = [.. _carService.EnumerateCoupled(wp.Locomotive)];
                 if (consist.Contains(car))
                 {
                     return true;
@@ -409,6 +409,7 @@ namespace WaypointQueue
             }
 
             string sentId = locoState.UnresolvedWaypoint?.Id;
+            ModLocator.Loader.LogDebug($"Attempting to insert waypoint at {beforeWaypointIndex} for loco {waypoint.Locomotive.Ident} with existing waypoint list of {locoState.Waypoints.Count}");
             locoState.Waypoints.Insert(beforeWaypointIndex, waypoint);
 
             ModLocator.Loader.LogDebug($"Saving loco queue state after inserting waypoint for loco id: {loco.id}");
