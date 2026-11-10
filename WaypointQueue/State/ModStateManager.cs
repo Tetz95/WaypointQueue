@@ -132,6 +132,7 @@ namespace WaypointQueue.State
 
         private void PrepareStorageKeyValueObjects()
         {
+            ModLocator.Loader.Log($"Preparing storage key value objects");
             DestroyStorageKeyValueObjects();
             KeyValueObject modStorageKeyValueObject = base.gameObject.AddComponent<KeyValueObject>();
             _waypointModStorage = new WaypointModStorage(modStorageKeyValueObject);
@@ -158,10 +159,15 @@ namespace WaypointQueue.State
 
         private void OnPropertiesDidRestore(PropertiesDidRestore evt)
         {
-            // The map editor restores properties without a game load, so the storages were never set up
+            // The map editor restores properties without a game load, so the storages were never set up there; in a game,
+            // storages missed by the map-will-load event (his 2.2.1) are set up now
             if (_waypointModStorage == null || _queueStateStorage == null || _routeStorage == null)
             {
-                return;
+                if (IsInEditor())
+                {
+                    return;
+                }
+                PrepareStorageKeyValueObjects();
             }
 
             _refuelService.RebuildCollections();
