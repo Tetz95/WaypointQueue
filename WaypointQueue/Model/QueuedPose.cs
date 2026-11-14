@@ -229,6 +229,16 @@ namespace WaypointQueue.Model
             {
                 return new OrderWaypoint(locationString, coupleToCarId, end, side, null, 0f, carEnd);
             }
+            // The junctions the picker laid the body over belong to the train as predicted at that point in the queue.
+            // When the real train already stands across one of those junctions on another leg, holding to the recorded
+            // leg sent it out and round to come back over the other one (a train straddling Nkbia on Svbi, picked over
+            // Sm2qt, ran out to turn and stuck behind another train instead of backing onto the mark). The same end and
+            // side are planned again for the train as it stands, as the game plans them.
+            if (Turns != null && Turns.Length >= 3 && StandsAcrossOtherLeg(locomotive, out string junction))
+            {
+                WaypointQueue.ModLocator.Loader.Log($"{locomotive.Ident}: the train stands across {junction} on another leg than the pose recorded; placement planned for the train as it stands");
+                return PosedWaypoint.Order(locomotive, Graph.Shared.Current, mark, end, side, null, coupleToCarId, carEnd);
+            }
             if (BodyLength > 0f)
             {
                 float length = AutoEngineerPlanner.CalculateTotalLength(locomotive.EnumerateCoupled().ToList());
@@ -238,6 +248,30 @@ namespace WaypointQueue.Model
                 }
             }
             return PosedWaypoint.Order(locomotive, Graph.Shared.Current, mark, end, side, null, coupleToCarId, carEnd);
+        }
+
+        // Whether the train stands across one of the recorded junctions on a leg the recorded turn doesn't use: it
+        // occupies one of the turn's two segments and another segment at the same node.
+        private bool StandsAcrossOtherLeg(BaseLocomotive locomotive, out string junction)
+        {
+            junction = null;
+            var occupied = new HashSet<TrackSegment>();
+            foreach (Car car in locomotive.EnumerateCoupled())
+            {
+                if (car.LocationF.segment != null) occupied.Add(car.LocationF.segment);
+                if (car.LocationR.segment != null) occupied.Add(car.LocationR.segment);
+            }
+            foreach (JunctionTurn turn in OrderWaypoint.DecodeTurns(Turns) ?? [])
+            {
+                bool onTurn = occupied.Any(s => turn.Touches(s.id));
+                bool onOtherLeg = occupied.Any(s => !turn.Touches(s.id) && (s.a?.id == turn.NodeId || s.b?.id == turn.NodeId));
+                if (onTurn && onOtherLeg)
+                {
+                    junction = turn.NodeId;
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }
