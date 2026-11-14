@@ -147,9 +147,11 @@ namespace WaypointQueue.Services
             return plannerStatus == "End of Track";
         }
 
-        public bool IsNearWaypoint(ManagedWaypoint waypoint)
+        public bool IsNearWaypoint(ManagedWaypoint waypoint) => IsNearWaypoint(waypoint, out _);
+
+        public bool IsNearWaypoint(ManagedWaypoint waypoint, out float closestDistance)
         {
-            (Location closestTrainEnd, Location _) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out float closestDistance, out _, out _, out _, out _);
+            (Location closestTrainEnd, Location _) = carService.GetTrainEndLocations(waypoint.Locomotive, waypoint.Location, out closestDistance, out _, out _, out _, out _);
             // The straight-line distance alone would count a train on a parallel track as near
             return closestDistance < 10 && Graph.Shared.Current.CheckSameRoute(closestTrainEnd, waypoint.Location, 10f);
         }

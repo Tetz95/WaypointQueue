@@ -301,9 +301,13 @@ namespace WaypointQueue
             }
 
             bool atEndOfTrack = _autoEngineerService.AtEndOfTrack(entry.Locomotive as BaseLocomotive);
-            bool isNearWaypoint = _autoEngineerService.IsNearWaypoint(entry.UnresolvedWaypoint);
+            bool isNearWaypoint = _autoEngineerService.IsNearWaypoint(entry.UnresolvedWaypoint, out float distanceToWaypoint);
             bool isTrainStopped = _waypointResolver.IsTrainStopped(entry.UnresolvedWaypoint);
-            bool needsEndOfTrackResolve = atEndOfTrack && isNearWaypoint && isTrainStopped;
+            bool needsEndOfTrackResolve = atEndOfTrack && isNearWaypoint && isTrainStopped && EndOfTrackSettled(entry.UnresolvedWaypoint, distanceToWaypoint);
+            if (!(atEndOfTrack && isNearWaypoint && isTrainStopped))
+            {
+                _endOfTrackSince.Remove(entry.UnresolvedWaypoint.Id);
+            }
 
             bool needsResolveFromWaitingSkipped = entry.UnresolvedWaypoint?.WaitingWasSkipped ?? false;
 
@@ -326,6 +330,39 @@ namespace WaypointQueue
             }
             Car target = car;
             return wp.Locomotive.EnumerateCoupled().Any(c => c.id == target.id);
+        }
+
+        // A train standing at "End of Track" within 10 m of the waypoint counts as there only when its end is on the mark
+        // (the auto engineer stops 1 m short of a track end: 1.5 m from the mark as measured) or it has stood like that for a while. Right after a coupling
+        // the train is stopped and the planner already reads "End of Track" for the bumper ahead, so a cut to be pushed the
+        // last half car length to the buffer was taken as arrived and set out where it stood.
+        private const float EndOfTrackOnMarkMeters = 2f;    // measured 1.5 m from the mark when stopped there
+        private const float EndOfTrackSettleSeconds = 30f;
+        private readonly Dictionary<string, float> _endOfTrackSince = new Dictionary<string, float>();
+
+        private bool EndOfTrackSettled(ManagedWaypoint wp, float distanceToWaypoint)
+        {
+            if (distanceToWaypoint <= EndOfTrackOnMarkMeters)
+            {
+                return true;
+            }
+            float now = UnityEngine.Time.time;
+            if (!_endOfTrackSince.TryGetValue(wp.Id, out float since))
+            {
+                if (_endOfTrackSince.Count > 200)
+                {
+                    _endOfTrackSince.Clear();
+                }
+                _endOfTrackSince[wp.Id] = now;
+                ModLocator.Loader.LogDebug($"{wp.Locomotive.Ident} stopped at end of track {distanceToWaypoint:0.0} m from the waypoint; waiting {EndOfTrackSettleSeconds:0} s before taking it as arrived");
+                return false;
+            }
+            if (now - since < EndOfTrackSettleSeconds)
+            {
+                return false;
+            }
+            ModLocator.Loader.Log($"{wp.Locomotive.Ident} stood at end of track {distanceToWaypoint:0.0} m from the waypoint for {EndOfTrackSettleSeconds:0} s; taking it as arrived");
+            return true;
         }
 
         private bool IsUnresolvedWaypointAlreadyCoupled(ManagedWaypoint wp)
