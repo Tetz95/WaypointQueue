@@ -113,6 +113,35 @@ namespace WaypointQueue.Services
             autoEngineerService.SendToWaypoint(ordersHelper, locationToMove);
         }
 
+        // Whether the refuel waypoint's loader is already alongside the train: under it, or just beyond one of its ends on
+        // the track it stands on. Two refuels in a row (coal, then water) left the train over the second loader, and sending
+        // it to the second waypoint first ran the whole train out a length and back before lining up the slot.
+        private const float AlongsideMarginMeters = 15f;
+
+        public bool LoaderAlongsideTrain(ManagedWaypoint waypoint)
+        {
+            try
+            {
+                if (!waypoint.WillRefuel || !Graph.Shared.TryGetLocationFromGamePoint(waypoint.RefuelPoint, 10f, out Location loader))
+                {
+                    return false;
+                }
+                (Location closestEnd, Location furthestEnd) = carService.GetTrainEndLocations(waypoint.Locomotive, loader, out float closestDistance, out _, out _, out _, out _);
+                float trainLength = CarService.CalculateTotalLength([.. carService.EnumerateCoupled(waypoint.Locomotive)]);
+                if (IsTargetBetween(loader.GetPosition(), closestEnd.GetPosition(), furthestEnd.GetPosition(), inclusive: true))
+                {
+                    // under the train, as long as it's on the train's own track (not a parallel one)
+                    return Graph.Shared.Current.CheckSameRoute(closestEnd, loader, trainLength + 1f);
+                }
+                return closestDistance <= AlongsideMarginMeters && Graph.Shared.Current.CheckSameRoute(closestEnd, loader, AlongsideMarginMeters);
+            }
+            catch (Exception ex)
+            {
+                ModLocator.Loader.LogError($"Checking whether {waypoint.Locomotive?.Ident}'s refuel loader is alongside failed: {ex.Message}");
+                return false;
+            }
+        }
+
         // The engineer counts a waypoint reached once it lies within a metre of the train (AutoEngineerPlanner.IsUnderTrain)
         // and stops there: the train's end came to rest about 0.7 m short of a refuel mark (0.65-0.77 m in four stops),
         // outside a small tender's fill radius. The mark goes that much further out, away from the train.

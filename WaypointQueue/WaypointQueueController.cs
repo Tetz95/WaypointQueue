@@ -727,6 +727,18 @@ namespace WaypointQueue
                 return;
             }
 
+            // A refuel waypoint whose loader the train already stands over (the second of two refuels, coal then water) is
+            // lined up from where the train stands: sent to the waypoint first, the auto engineer ran the whole train out a
+            // length and back to arrive on the mark before the slot was lined up.
+            if (waypoint.WillRefuel && !waypoint.CurrentlyRefueling && !waypoint.HasAnyCouplingOrders && !waypoint.MoveTrainPastWaypoint
+                && _refuelService.LoaderAlongsideTrain(waypoint))
+            {
+                ModLocator.Loader.Log($"{state.Locomotive?.Ident}: the {waypoint.RefuelLoadId} loader is already alongside the train; lining up from where it stands");
+                _refuelService.OrderToRefuel(waypoint, ordersHelper, out _);
+                ModStateManager.Shared.SaveLocoWaypointState(state.LocomotiveId, state);
+                return;
+            }
+
             // A picked pose goes out only with the orientation option on (upstream 2.1.1's experimental setting); the pose
             // this method makes for sending the train past the waypoint below doesn't depend on it.
             QueuedPose pose = ModLocator.Settings.EnableWaypointOrientationFeature ? waypoint.Pose : null;
